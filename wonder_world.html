@@ -250,6 +250,21 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
+// 마우스 상태
+let mouseX = 0, mouseY = 0, mouseDown = false;
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+  mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+});
+canvas.addEventListener('mousedown', e => {
+  if (e.button === 0) {
+    mouseDown = true;
+    if (gs === 'playing' && player && weapon !== 5) doShootMouse();
+  }
+});
+canvas.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
+
 function handleKey(code) {
   if (gs === 'title' || gs === 'gameover') {
     if (code === 'Space' || code === 'Enter') startGame();
@@ -380,24 +395,26 @@ function genWorld(toX) {
     groundSegs.push({ x: genX, w });
 
     if (genX > 800) {
-      // Ground enemy
+      // Ground enemy - 현재 세그먼트 위에 직접 스폰 (발판 보장)
       if (Math.random() < 0.98) {
         const spd = 1.4 + Math.min(score / 2000, 2.0) + Math.random() * 1.2;
+        const spawnX = genX + 10 + Math.random() * Math.max(w - 20, 10);
+        const spawnY = segGroundY({ x: genX, w }, spawnX) - 46;
         enemies.push({
           type:    'ground',
-          x:       genX + w + 80 + Math.random() * 320,
-          y:       GROUND_Y - 46,
+          x:       spawnX,
+          y:       spawnY,
           w: 36,   h: 46,
           vx:      -spd,
           vy:      0,
           alive:   true,
-          onGround: false,
+          onGround: true,
           anim:    0,
           animT:   0,
         });
       }
       // Flying enemy (appears after some distance)
-      if (genX > 1200 && Math.random() < 0.85) {
+      if (genX > 1200 && Math.random() < 0.20) {
         const spd = 1.8 + Math.min(score / 2500, 1.8) + Math.random() * 1.0;
         const flyY = 160 + Math.random() * 130;
         enemies.push({
@@ -443,9 +460,22 @@ function genWorld(toX) {
 
     genX += w;
 
-    // Gap (never in first 650 units)
-    if (genX > 650 && Math.random() < 0.38) {
-      genX += 52 + Math.random() * 78;
+    // Gap or Slope (never in first 650 units)
+    if (genX > 650) {
+      const r = Math.random();
+      if (r < 0.18) {
+        // 슬로프(언덕): 오르막 + 내리막
+        const slopeW = 70 + Math.random() * 90;
+        const hillH  = 28 + Math.random() * 42;
+        groundSegs.push({ x: genX, w: slopeW, y1: GROUND_Y, y2: GROUND_Y - hillH });
+        genX += slopeW;
+        groundSegs.push({ x: genX, w: slopeW, y1: GROUND_Y - hillH, y2: GROUND_Y });
+        genX += slopeW;
+      } else if (r < 0.36) {
+        // 낭떠러지 (비율 줄임: 기존 38% → 약 18%)
+        genX += 52 + Math.random() * 78;
+      }
+      // 나머지 ~64%는 이음새 없이 평지 연결
     }
 
     // Background tree
@@ -492,19 +522,23 @@ function doShoot() {
   if (!player) return;
   // 1 나이프
   if (weapon === 1) { doKnife(); return; }
+  // 엎드릴 때는 낮은 위치에서 발사
+  const curPH = player.crouch ? 28 : PH;
+  const bx = player.x + (player.facing === 1 ? PW + 4 : -4);
+  const by = player.y + (PH - curPH) + curPH * 0.5;
   // 2 권총 (단발)
   if (weapon === 2) {
-    if (ammo <= 0) { doKnife(); return; }
+    if (ammo <= 0) { weapon = 1; doKnife(); return; }
     ammo--;
-    bullets.push({ x: player.x+(player.facing===1?PW+4:-4), y: player.y+PH*0.38, vx: 12*player.facing, vy: 0, alive: true, type: 'pistol' });
+    bullets.push({ x: bx, y: by, vx: 12*player.facing, vy: 0, alive: true, type: 'pistol' });
     sfx('shoot'); return;
   }
   // 3 산탄총 (3발 포물선)
   if (weapon === 3) {
     if ((weaponAmmo[3]||0) <= 0) { weapon = ammo>0?2:1; doShoot(); return; }
     weaponAmmo[3]--;
-    for (const vy of [-2.5, 0, 2.5]) {
-      bullets.push({ x: player.x+(player.facing===1?PW+4:-4), y: player.y+PH*0.38, vx: 10*player.facing, vy, alive: true, type: 'triple' });
+    for (const vy of [-4.5, -2.0, 0.5]) {
+      bullets.push({ x: bx, y: by, vx: 10*player.facing, vy, alive: true, type: 'triple' });
     }
     sfx('shoot'); return;
   }
@@ -512,14 +546,14 @@ function doShoot() {
   if (weapon === 4) {
     if ((weaponAmmo[4]||0) <= 0) { weapon = ammo>0?2:1; doShoot(); return; }
     weaponAmmo[4]--;
-    bullets.push({ x: player.x+(player.facing===1?PW+4:-4), y: player.y+PH*0.38, vx: 8*player.facing, vy: 0, alive: true, type: 'homing', life: 200 });
+    bullets.push({ x: bx, y: by, vx: 8*player.facing, vy: 0, alive: true, type: 'homing', life: 200 });
     sfx('shoot'); return;
   }
   // 5 연발총
   if (weapon === 5) {
-    if ((weaponAmmo[5]||0) <= 0) { weapon = ammo>0?2:1; return; }
+    if ((weaponAmmo[5]||0) <= 0) { weapon = ammo>0?2:1; doShoot(); return; }
     weaponAmmo[5]--;
-    bullets.push({ x: player.x+(player.facing===1?PW+4:-4), y: player.y+PH*0.38, vx: 15*player.facing, vy: 0, alive: true, type: 'rapid' });
+    bullets.push({ x: bx, y: by, vx: 15*player.facing, vy: 0, alive: true, type: 'rapid' });
     sfx('shoot'); return;
   }
 }
@@ -531,6 +565,51 @@ function doKnife() {
   sfx('knife');
 }
 
+function doShootMouse() {
+  if (!player) return;
+  if (weapon === 1) { doKnife(); return; }
+  // 총구 위치 (캔버스 좌표)
+  const curPH = player.crouch ? 28 : PH;
+  const gunWorldX = player.x + (player.facing === 1 ? PW + 4 : -4);
+  const gunScreenX = gunWorldX - cameraX;
+  const gunScreenY = player.y + (PH - curPH) + curPH * 0.5;
+  // 마우스 방향 각도
+  const angle = Math.atan2(mouseY - gunScreenY, mouseX - gunScreenX);
+  const speed = 14;
+  const vx = Math.cos(angle) * speed;
+  const vy = Math.sin(angle) * speed;
+  const bx = gunWorldX;
+  const by = gunScreenY;
+
+  if (weapon === 2) {
+    if (ammo <= 0) { weapon = 1; doKnife(); return; }
+    ammo--;
+    bullets.push({ x: bx, y: by, vx, vy, alive: true, type: 'pistol' });
+    sfx('shoot'); return;
+  }
+  if (weapon === 3) {
+    if ((weaponAmmo[3]||0) <= 0) { weapon = ammo>0?2:1; doShootMouse(); return; }
+    weaponAmmo[3]--;
+    for (const spread of [-0.18, 0, 0.18]) {
+      const a = angle + spread;
+      bullets.push({ x: bx, y: by, vx: Math.cos(a)*10, vy: Math.sin(a)*10, alive: true, type: 'triple' });
+    }
+    sfx('shoot'); return;
+  }
+  if (weapon === 4) {
+    if ((weaponAmmo[4]||0) <= 0) { weapon = ammo>0?2:1; doShootMouse(); return; }
+    weaponAmmo[4]--;
+    bullets.push({ x: bx, y: by, vx, vy, alive: true, type: 'homing', life: 200 });
+    sfx('shoot'); return;
+  }
+  if (weapon === 5) {
+    if ((weaponAmmo[5]||0) <= 0) { weapon = ammo>0?2:1; return; }
+    weaponAmmo[5]--;
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle)*15, vy: Math.sin(angle)*15, alive: true, type: 'rapid' });
+    sfx('shoot'); return;
+  }
+}
+
 // ════════════════════════════════════════
 //  HELPERS
 // ════════════════════════════════════════
@@ -538,9 +617,17 @@ function overlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
+function segGroundY(seg, worldX) {
+  if (seg.y1 !== undefined) {
+    const t = Math.max(0, Math.min(1, (worldX - seg.x) / seg.w));
+    return seg.y1 + (seg.y2 - seg.y1) * t;
+  }
+  return GROUND_Y;
+}
+
 function groundYBelow(worldX) {
   for (const seg of groundSegs) {
-    if (worldX >= seg.x && worldX <= seg.x + seg.w) return GROUND_Y;
+    if (worldX >= seg.x && worldX <= seg.x + seg.w) return segGroundY(seg, worldX);
   }
   return null;
 }
@@ -593,8 +680,24 @@ function update() {
       } else {
         gs = 'playing';
         spawnPlayer();
-        player.x   = cameraX + 90;
-        player.y   = GROUND_Y - PH - 30;
+        // 부활 위치: 카메라 근처에서 가장 가까운 안전한 발판 위
+        const respawnTargetX = cameraX + 90;
+        let safeSeg = null;
+        let minDist = Infinity;
+        for (const seg of groundSegs) {
+          if (seg.x + seg.w < cameraX) continue; // 화면 밖 왼쪽 발판 제외
+          if (seg.y1 !== undefined && seg.y1 !== seg.y2) continue; // 슬로프 제외
+          const segCenterX = seg.x + seg.w / 2;
+          const dist = Math.abs(segCenterX - respawnTargetX);
+          if (dist < minDist) { minDist = dist; safeSeg = seg; }
+        }
+        if (safeSeg) {
+          player.x = Math.max(safeSeg.x + 10, Math.min(safeSeg.x + safeSeg.w - PW - 10, respawnTargetX));
+          player.y = GROUND_Y - PH - 2;
+        } else {
+          player.x = respawnTargetX;
+          player.y = GROUND_Y - PH - 30;
+        }
         player.inv = 120;
       }
     }
@@ -607,6 +710,29 @@ function update() {
 
   // 핵: 무한 탄약
   if (hack.infiniteAmmo) { ammo = MAX_AMMO; weaponAmmo[3]=999; weaponAmmo[4]=999; weaponAmmo[5]=999; }
+
+  // 자동 무기 전환: 현재 무기 탄약 소진 시 즉시 다른 무기로 변경
+  if (weapon === 2 && ammo <= 0) {
+    if ((weaponAmmo[3]||0) > 0) weapon = 3;
+    else if ((weaponAmmo[4]||0) > 0) weapon = 4;
+    else if ((weaponAmmo[5]||0) > 0) weapon = 5;
+    else weapon = 1;
+  } else if (weapon === 3 && (weaponAmmo[3]||0) <= 0) {
+    if (ammo > 0) weapon = 2;
+    else if ((weaponAmmo[4]||0) > 0) weapon = 4;
+    else if ((weaponAmmo[5]||0) > 0) weapon = 5;
+    else weapon = 1;
+  } else if (weapon === 4 && (weaponAmmo[4]||0) <= 0) {
+    if (ammo > 0) weapon = 2;
+    else if ((weaponAmmo[3]||0) > 0) weapon = 3;
+    else if ((weaponAmmo[5]||0) > 0) weapon = 5;
+    else weapon = 1;
+  } else if (weapon === 5 && (weaponAmmo[5]||0) <= 0) {
+    if (ammo > 0) weapon = 2;
+    else if ((weaponAmmo[3]||0) > 0) weapon = 3;
+    else if ((weaponAmmo[4]||0) > 0) weapon = 4;
+    else weapon = 1;
+  }
 
   // 핵: 뉵크
   if (hack.nuke) {
@@ -643,8 +769,9 @@ function update() {
   player.onGround = false;
   for (const seg of groundSegs) {
     if (player.x + PW > seg.x && player.x < seg.x + seg.w) {
-      if (player.vy >= 0 && player.y + PH > GROUND_Y && player.y + PH < GROUND_Y + 32) {
-        player.y        = GROUND_Y - PH;  // always use full height for y position
+      const segY = segGroundY(seg, player.x + PW / 2);
+      if (player.vy >= 0 && player.y + PH > segY && player.y + PH < segY + 32) {
+        player.y        = segY - PH;
         player.vy       = 0;
         player.onGround = true;
         break;
@@ -665,15 +792,26 @@ function update() {
   // ── 1초(60프레임)마다 화면 오른쪽 끝에서 적 강제 스폰 ──
   if (frameCount % 60 === 0) {
     const spd = 1.4 + Math.min(score / 2000, 2.0) + Math.random() * 1.2;
-    enemies.push({
-      type: 'ground',
-      x: cameraX + W + 60 + Math.random() * 200,
-      y: GROUND_Y - 46,
-      w: 36, h: 46,
-      vx: -spd, vy: 0,
-      alive: true, onGround: false, anim: 0, animT: 0,
-    });
-    if (cameraX > 1200) {
+    // 화면 오른쪽에서 발판이 있는 세그먼트 찾기
+    const targetX = cameraX + W + 60 + Math.random() * 200;
+    const spawnSeg = groundSegs.find(seg =>
+      seg.y1 === undefined &&   // 슬로프 제외
+      seg.x <= targetX && seg.x + seg.w >= targetX + 36
+    ) || groundSegs.find(seg =>
+      seg.y1 === undefined && seg.x > cameraX + W
+    );
+    if (spawnSeg) {
+      const spawnX = Math.max(spawnSeg.x + 4, Math.min(spawnSeg.x + spawnSeg.w - 40, targetX));
+      enemies.push({
+        type: 'ground',
+        x: spawnX,
+        y: GROUND_Y - 46,
+        w: 36, h: 46,
+        vx: -spd, vy: 0,
+        alive: true, onGround: true, anim: 0, animT: 0,
+      });
+    }
+    if (cameraX > 1200 && frameCount % 180 === 0) {
       const flySpd = 1.8 + Math.min(score / 2500, 1.8) + Math.random() * 1.0;
       enemies.push({
         type: 'fly',
@@ -696,10 +834,10 @@ function update() {
   // ── Knife ──
   if (player.knifeCool > 0) player.knifeCool--;
 
-  // 연발총 자동 사격 (SPACE 홈드)
-  if (weapon === 5 && keys['Space'] && gs === 'playing') {
+  // 연발총 자동 사격 (SPACE 홀드 또는 마우스 홀드)
+  if (weapon === 5 && (keys['Space'] || mouseDown) && gs === 'playing') {
     if (shootCooldown <= 0 && (weaponAmmo[5]||0) > 0) {
-      doShoot();
+      if (mouseDown) doShootMouse(); else doShoot();
       shootCooldown = 3;
     }
   }
@@ -753,7 +891,7 @@ function update() {
     if (b.x < cameraX - 120 || b.x > cameraX + W + 120 || b.y < -20 || b.y > H + 20) { b.alive = false; continue; }
     for (const e of enemies) {
       if (!e.alive) continue;
-      if (overlap(b.x - 5, b.y - 3, 14, 6, e.x, e.y, e.w, e.h)) {
+      if (overlap(b.x - 8, b.y - 8, 20, 16, e.x, e.y, e.w, e.h)) {
         e.alive = false;
         b.alive = false;
         score  += 100;
@@ -780,7 +918,16 @@ function update() {
         const ph = player.crouch ? 28 : PH;
         const hy = player.y + PH - ph;  // align bottom of hitbox to player foot
         if (overlap(player.x + 4, hy + 4, PW - 8, ph - 8, e.x, e.y, e.w, e.h)) {
-          killPlayer(); return;
+          // 밟기 공격: 점프 중 낙하하면서 상단에 닿을 때
+          if (!player.onGround && player.vy > 0 && (player.y + PH) <= e.y + e.h * 0.30) {
+            e.alive = false;
+            score += 50;
+            burst(e.x + e.w / 2, e.y + e.h / 2, '#ffdd00', 12);
+            sfx('kill');
+            player.vy = JUMP_VY * 0.55;
+          } else {
+            killPlayer(); return;
+          }
         }
       }
       continue;
@@ -799,13 +946,13 @@ function update() {
 
     e.x  += e.vx;
     e.vy += GRAVITY;
-
-    // Ground collision
+    e.y  += e.vy;
     e.onGround = false;
     for (const seg of groundSegs) {
       if (e.x + e.w > seg.x && e.x < seg.x + seg.w) {
-        if (e.vy >= 0 && e.y + e.h > GROUND_Y && e.y + e.h < GROUND_Y + 32) {
-          e.y        = GROUND_Y - e.h;
+        const segY = segGroundY(seg, e.x + e.w / 2);
+        if (e.vy >= 0 && e.y + e.h > segY && e.y + e.h < segY + 60) {
+          e.y        = segY - e.h;
           e.vy       = 0;
           e.onGround = true;
           break;
@@ -822,7 +969,16 @@ function update() {
       const ph = player.crouch ? 28 : PH;
       const hy = player.y + PH - ph;  // align bottom of hitbox to player foot
       if (overlap(player.x + 4, hy + 4, PW - 8, ph - 8, e.x, e.y, e.w, e.h)) {
-        killPlayer(); return;
+        // 밟기 공격(스텀프): 점프 중 낙하하면서 적 머리(상단 30%) 위에 닿을 때만
+        if (!player.onGround && player.vy > 0 && (player.y + PH) <= e.y + e.h * 0.30) {
+          e.alive = false;
+          score += 50;
+          burst(e.x + e.w / 2, e.y + e.h / 2, '#ffdd00', 12);
+          sfx('kill');
+          player.vy = JUMP_VY * 0.55; // 밟은 후 튀어오르기
+        } else {
+          killPlayer(); return;
+        }
       }
     }
 
@@ -951,19 +1107,52 @@ function drawTree(x, h, tw) {
 
 function drawGround(seg) {
   const sx = seg.x - cameraX;
-  // Grass
-  ctx.fillStyle = '#5a9e2a';
-  ctx.fillRect(sx, GROUND_Y, seg.w, 14);
-  ctx.fillStyle = '#3d7a18';
-  ctx.fillRect(sx, GROUND_Y, seg.w, 4);
-  // Dirt
-  ctx.fillStyle = '#8B5E3C';
-  ctx.fillRect(sx, GROUND_Y + 14, seg.w, H - GROUND_Y - 14);
-  // Texture
-  ctx.fillStyle = '#7A4E2A';
-  for (let dx = 8; dx < seg.w - 8; dx += 36) {
-    ctx.fillRect(sx + dx,      GROUND_Y + 22, 18, 5);
-    ctx.fillRect(sx + dx + 14, GROUND_Y + 38, 14, 4);
+  const isSlope = seg.y1 !== undefined && seg.y1 !== seg.y2;
+  const isFlatCustom = seg.y1 !== undefined && seg.y1 === seg.y2;
+  const gY = isFlatCustom ? seg.y1 : GROUND_Y;
+
+  if (isSlope) {
+    const sy1 = seg.y1; // 왼쪽 지면 Y
+    const sy2 = seg.y2; // 오른쪽 지면 Y
+    // 잔디 상단 띠
+    ctx.fillStyle = '#3d7a18';
+    ctx.beginPath();
+    ctx.moveTo(sx,          sy1);
+    ctx.lineTo(sx + seg.w,  sy2);
+    ctx.lineTo(sx + seg.w,  sy2 + 4);
+    ctx.lineTo(sx,          sy1 + 4);
+    ctx.closePath(); ctx.fill();
+    // 잔디
+    ctx.fillStyle = '#5a9e2a';
+    ctx.beginPath();
+    ctx.moveTo(sx,          sy1 + 4);
+    ctx.lineTo(sx + seg.w,  sy2 + 4);
+    ctx.lineTo(sx + seg.w,  sy2 + 14);
+    ctx.lineTo(sx,          sy1 + 14);
+    ctx.closePath(); ctx.fill();
+    // 흙
+    ctx.fillStyle = '#8B5E3C';
+    ctx.beginPath();
+    ctx.moveTo(sx,          sy1 + 14);
+    ctx.lineTo(sx + seg.w,  sy2 + 14);
+    ctx.lineTo(sx + seg.w,  H);
+    ctx.lineTo(sx,          H);
+    ctx.closePath(); ctx.fill();
+  } else {
+    // Grass
+    ctx.fillStyle = '#5a9e2a';
+    ctx.fillRect(sx, gY, seg.w, 14);
+    ctx.fillStyle = '#3d7a18';
+    ctx.fillRect(sx, gY, seg.w, 4);
+    // Dirt
+    ctx.fillStyle = '#8B5E3C';
+    ctx.fillRect(sx, gY + 14, seg.w, H - gY - 14);
+    // Texture
+    ctx.fillStyle = '#7A4E2A';
+    for (let dx = 8; dx < seg.w - 8; dx += 36) {
+      ctx.fillRect(sx + dx,      gY + 22, 18, 5);
+      ctx.fillRect(sx + dx + 14, gY + 38, 14, 4);
+    }
   }
 }
 
@@ -1143,14 +1332,50 @@ function drawPlayer(x, y, facing, anim, onGround, knifeT, shadowWorldX, crouch) 
     ctx.fillStyle = '#3355cc';
     ctx.fillRect(x - 5, spriteY + 7, 9, 9);
     ctx.fillRect(x + 33, spriteY + 7, 9, 9);
-    // Gun or Knife (held low)
-    if (ammo > 0) {
+    // Gun or Knife (held low) - weapon 별 이미지
+    if (weapon === 1) {
+      // 나이프: 짧고 빛나는 날
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x + 33, spriteY + 6, 24, 4);
+      ctx.fillStyle = '#dddddd';
+      ctx.fillRect(x + 45, spriteY + 5, 12, 2);
+      ctx.fillStyle = '#774400';
+      ctx.fillRect(x + 33, spriteY + 5, 7, 7);
+    } else if (weapon === 2) {
+      // 권총
       ctx.fillStyle = '#555';
       ctx.fillRect(x + 33, spriteY + 8, 18, 5);
       ctx.fillStyle = '#333';
       ctx.fillRect(x + 49, spriteY + 7, 4, 3);
       ctx.fillStyle = '#774400';
       ctx.fillRect(x + 35, spriteY + 12, 7, 6);
+    } else if (weapon === 3) {
+      // 산탄총: 이중 배럴
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x + 33, spriteY + 5, 20, 4);
+      ctx.fillRect(x + 33, spriteY + 12, 20, 4);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(x + 50, spriteY + 4, 5, 13);
+      ctx.fillStyle = '#774400';
+      ctx.fillRect(x + 33, spriteY + 9, 10, 5);
+    } else if (weapon === 4) {
+      // 유도탄: 원통 로켓
+      ctx.fillStyle = '#cc66ee';
+      ctx.fillRect(x + 33, spriteY + 7, 18, 7);
+      ctx.fillStyle = '#aa44cc';
+      ctx.beginPath();
+      ctx.ellipse(x + 52, spriteY + 10, 7, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(x + 33, spriteY + 7, 5, 7);
+    } else if (weapon === 5) {
+      // 연발총: 긴 배럴
+      ctx.fillStyle = '#335577';
+      ctx.fillRect(x + 33, spriteY + 7, 28, 6);
+      ctx.fillStyle = '#557799';
+      ctx.fillRect(x + 57, spriteY + 6, 8, 3);
+      ctx.fillStyle = '#774400';
+      ctx.fillRect(x + 33, spriteY + 12, 9, 6);
     } else {
       ctx.fillStyle = '#aaaaaa';
       ctx.fillRect(x + 33, spriteY + 6, 28, 5);
@@ -1204,15 +1429,57 @@ function drawPlayer(x, y, facing, anim, onGround, knifeT, shadowWorldX, crouch) 
     ctx.fillStyle = '#3355cc';
     ctx.fillRect(x - 5,  spriteY + 21, 8, 14);
     ctx.fillRect(x + 33, spriteY + 21, 8, 14);
-    // Gun or Knife
-    if (ammo > 0) {
+    // Gun or Knife - weapon 별 이미지
+    if (weapon === 1) {
+      // 나이프
+      const angle = knifeT > 0 ? -Math.PI * 0.7 * (knifeT / KNIFE_FRAMES) : -Math.PI * 0.15;
+      ctx.save();
+      ctx.translate(x + 36, spriteY + 28);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(0, -3, 36, 6);
+      ctx.fillStyle = '#cccccc';
+      ctx.fillRect(18, -2, 18, 4);
+      ctx.fillStyle = '#774400';
+      ctx.fillRect(-8, -5, 10, 10);
+      ctx.restore();
+    } else if (weapon === 2) {
+      // 권총
       ctx.fillStyle = '#555';
       ctx.fillRect(x + 33, spriteY + 25, 22, 7);
       ctx.fillStyle = '#333';
       ctx.fillRect(x + 53, spriteY + 24, 5, 4);
       ctx.fillStyle = '#774400';
       ctx.fillRect(x + 35, spriteY + 31, 9, 8);
+    } else if (weapon === 3) {
+      // 산탄총: 이중 배럴
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x + 33, spriteY + 22, 24, 5);
+      ctx.fillRect(x + 33, spriteY + 30, 24, 5);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(x + 55, spriteY + 21, 5, 15);
+      ctx.fillStyle = '#774400';
+      ctx.fillRect(x + 35, spriteY + 27, 10, 7);
+    } else if (weapon === 4) {
+      // 유도탄: 로켓
+      ctx.fillStyle = '#cc66ee';
+      ctx.fillRect(x + 33, spriteY + 24, 22, 8);
+      ctx.fillStyle = '#aa44cc';
+      ctx.beginPath();
+      ctx.ellipse(x + 56, spriteY + 28, 8, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(x + 33, spriteY + 24, 6, 8);
+    } else if (weapon === 5) {
+      // 연발총: 긴 배럴
+      ctx.fillStyle = '#335577';
+      ctx.fillRect(x + 33, spriteY + 25, 30, 7);
+      ctx.fillStyle = '#557799';
+      ctx.fillRect(x + 59, spriteY + 23, 9, 4);
+      ctx.fillStyle = '#774400';
+      ctx.fillRect(x + 35, spriteY + 31, 9, 8);
     } else {
+      // 탄약 없음: 칼
       const angle = knifeT > 0 ? -Math.PI * 0.7 * (knifeT / KNIFE_FRAMES) : -Math.PI * 0.15;
       ctx.save();
       ctx.translate(x + 36, spriteY + 28);
@@ -1294,17 +1561,24 @@ function drawAmmoItem(x, y) {
 }
 
 function drawHUD() {
-  ctx.fillStyle = 'rgba(0,0,0,0.58)';
-  ctx.fillRect(0, 0, W, 52);
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.fillRect(0, 0, W, 62);
 
-  // Lives
+  // 생명
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 13px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('LIFE:', 10, 28);
+  ctx.fillText('LIFE:', 10, 24);
   for (let i = 0; i < 5; i++) {
-    heart(58 + i * 28, 13, 10, i < lives ? '#ff3366' : '#444');
+    heart(58 + i * 28, 9, 10, i < lives ? '#ff3366' : '#444');
   }
+
+  // 점수
+  ctx.font = 'bold 15px monospace';
+  ctx.fillStyle = '#ffdd44';
+  ctx.textAlign = 'right';
+  ctx.fillText(`SCORE: ${score}`, W - 10, 24);
+
   // 핵 HUD
   if (hack.god || hack.infiniteAmmo || hack.speed) {
     const tags = [];
@@ -1314,50 +1588,65 @@ function drawHUD() {
     ctx.fillStyle = '#00ff88';
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('🛡️ ' + tags.join(' '), 10, 48);
+    ctx.fillText('🛡️ ' + tags.join(' '), 10, 58);
   }
 
-  // Ammo bar
-  const ax = 220;
-  ctx.fillStyle = '#fff';
-  ctx.fillText('AMMO:', ax, 28);
-  if (weapon === 1) {
-    ctx.fillStyle = '#aaddff';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('🔪 KNIFE MODE', ax + 56, 27);
-  } else if (weapon === 2) {
-    if (ammo > 0) {
-      ctx.fillStyle = '#333';
-      ctx.fillRect(ax + 56, 14, 120, 14);
-      ctx.fillStyle = ammo > 10 ? '#ffee00' : '#ff4444';
-      ctx.fillRect(ax + 56, 14, 120 * (ammo / MAX_AMMO), 14);
-      ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
-      ctx.strokeRect(ax + 56, 14, 120, 14);
-      ctx.fillStyle = '#fff'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(`${ammo} / ${MAX_AMMO}`, ax + 116, 25);
-    } else {
-      ctx.fillStyle = '#ffaa44'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left';
-      ctx.fillText('🔪 KNIFE MODE', ax + 56, 27);
+  // 무기 슬롯 바
+  const SLOTS = [
+    { id: 1, label: '1:나이프', icon: '🔪', color: '#7ec8e3' },
+    { id: 2, label: '2:권총',   icon: '🔫', color: '#ffee44' },
+    { id: 3, label: '3:산탄총', icon: '🔫', color: '#ff9800' },
+    { id: 4, label: '4:유도탄', icon: '🚀', color: '#ab47bc' },
+    { id: 5, label: '5:연발총', icon: '⚡',  color: '#00bcd4' },
+  ];
+
+  const slotW = 110, slotH = 28, slotY = 32, startX = W / 2 - (SLOTS.length * slotW) / 2;
+
+  for (let i = 0; i < SLOTS.length; i++) {
+    const sl = SLOTS[i];
+    const sx = startX + i * slotW;
+    const isSelected = weapon === sl.id;
+    let available = true;
+    if (sl.id === 3 || sl.id === 4 || sl.id === 5) available = (weaponAmmo[sl.id] || 0) > 0;
+
+    ctx.save();
+    ctx.globalAlpha = available ? 1.0 : 0.28;
+
+    // 슬롯 배경
+    ctx.fillStyle = isSelected ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.35)';
+    rrect(sx + 2, slotY, slotW - 4, slotH, 5);
+    ctx.fill();
+
+    // 선택 테두리
+    if (isSelected) {
+      ctx.strokeStyle = sl.color;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = sl.color;
+      ctx.shadowBlur = 8;
+      rrect(sx + 2, slotY, slotW - 4, slotH, 5);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
     }
-  } else {
-    const wColors = { 3:'#ff9800', 4:'#ab47bc', 5:'#00bcd4' };
-    const cnt = weaponAmmo[weapon] || 0;
-    ctx.fillStyle = wColors[weapon] || '#fff';
-    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(`${WEAPON_NAMES[weapon]}  🔫 × ${cnt}`, ax + 56, 27);
+
+    // 아이콘 + 라벨
+    ctx.fillStyle = isSelected ? sl.color : '#bbb';
+    ctx.font = isSelected ? 'bold 11px monospace' : '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(sl.icon + ' ' + sl.label, sx + slotW / 2, slotY + 13);
+
+    // 탄약 수
+    ctx.fillStyle = isSelected ? '#fff' : '#999';
+    ctx.font = '9px monospace';
+    if (sl.id === 1) {
+      ctx.fillText('∞', sx + slotW / 2, slotY + 25);
+    } else if (sl.id === 2) {
+      ctx.fillText(ammo + '/' + MAX_AMMO, sx + slotW / 2, slotY + 25);
+    } else {
+      ctx.fillText('×' + (weaponAmmo[sl.id] || 0), sx + slotW / 2, slotY + 25);
+    }
+
+    ctx.restore();
   }
-
-  // 현재 무기
-  ctx.fillStyle = '#aaddff';
-  ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left';
-  ctx.fillText(`[${weapon}] ${WEAPON_NAMES[weapon]}`, ax, 44);
-
-  // Score
-  ctx.font = 'bold 15px monospace';
-  ctx.fillStyle = '#ffdd44';
-  ctx.textAlign = 'right';
-  ctx.fillText(`SCORE: ${score}`, W - 10, 28);
 }
 
 function drawTitleScreen() {
