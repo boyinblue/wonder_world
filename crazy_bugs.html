@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crazy Bugs</title>
+  <style>
+    :root {
+      --bg1: #1f2438;
+      --bg2: #101523;
+      --hud: rgba(255, 248, 232, 0.9);
+      --ink: #181818;
+      --accent: #f57f17;
+      --danger: #d7263d;
+      --ok: #2a9d8f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 20% 15%, #2c3957 0, transparent 45%),
+        radial-gradient(circle at 80% 85%, #263250 0, transparent 40%),
+        linear-gradient(140deg, var(--bg1), var(--bg2));
+      color: #fff;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: none;
+    }
+
+    .hud {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 10;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 2px solid #e3dac6;
+      background: var(--hud);
+      color: var(--ink);
+      min-width: 210px;
+      backdrop-filter: blur(2px);
+    }
+
+    .hud p {
+      margin: 5px 0;
+      font-weight: 700;
+    }
+
+    .help {
+      position: fixed;
+      right: 14px;
+      top: 14px;
+      z-index: 10;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 2px solid #c9d4e2;
+      background: rgba(18, 25, 41, 0.86);
+      font-size: 13px;
+      line-height: 1.45;
+      max-width: 260px;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(10, 15, 26, 0.72);
+      z-index: 20;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .panel {
+      width: min(540px, 100%);
+      border-radius: 16px;
+      border: 2px solid #f1e8d7;
+      background: #fff6e9;
+      color: #111;
+      padding: 20px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    .panel h1 {
+      margin: 0 0 10px;
+      text-transform: lowercase;
+      font-size: clamp(30px, 6vw, 52px);
+    }
+
+    .panel p {
+      margin: 8px 0;
+      color: #333;
+      font-size: 16px;
+    }
+
+    .panel button,
+    .panel a {
+      margin-top: 12px;
+      display: inline-block;
+      text-decoration: none;
+      border: 2px solid #111;
+      background: #111;
+      color: #fff;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+
+    .panel a {
+      margin-left: 8px;
+      background: transparent;
+      color: #111;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <p id="score">Score: 0</p>
+    <p id="time">Time: 0s</p>
+    <p id="hp">HP: 5</p>
+    <p id="bugs">Bugs: 0</p>
+    <p id="weaponName">🔫 권총</p>
+    <p id="ammoDisplay">탄약 ∞</p>
+  </div>
+
+  <div class="help">
+    <strong>조작</strong><br />
+    이동: 방향키<br />
+    조준: 마우스 포인터<br />
+    발사: 마우스 왼쪽 버튼(홀드 가능)<br />
+    <strong>무기 선택</strong><br />
+    [1] 🔪 나이프 &nbsp; [2] 🔫 권총<br />
+    [3] 🔫 산탄총 &nbsp; [4] 🚀 유도탄<br />
+    [5] ⚡ 연발총 (맵에서 픽업)
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <h1>crazy bugs</h1>
+      <p>주인공은 중앙에서 시작합니다. 사방에서 몰려오는 벌레들을 피하고 쏘세요.</p>
+      <p>오래 버틸수록 점수가 빠르게 올라갑니다.</p>
+      <button id="startBtn">게임 시작</button>
+      <a href="index.html">메인으로</a>
+    </div>
+  </div>
+
+  <div class="overlay" id="endOverlay" style="display:none;">
+    <div class="panel">
+      <h1>game over</h1>
+      <p id="finalScore">최종 점수: 0</p>
+      <button id="restartBtn">다시 시작</button>
+      <a href="index.html">메인으로</a>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const ui = {
+      score: document.getElementById("score"),
+      time: document.getElementById("time"),
+      hp: document.getElementById("hp"),
+      bugs: document.getElementById("bugs"),
+      weaponName: document.getElementById("weaponName"),
+      ammoDisplay: document.getElementById("ammoDisplay"),
+      startOverlay: document.getElementById("startOverlay"),
+      endOverlay: document.getElementById("endOverlay"),
+      finalScore: document.getElementById("finalScore"),
+      startBtn: document.getElementById("startBtn"),
+      restartBtn: document.getElementById("restartBtn"),
+    };
+
+    let W = 0;
+    let H = 0;
+
+    const PLAYER_SPEED = 4;
+
+    const keys = new Set();
+    const mouse = { x: 0, y: 0, down: false };
+
+    const state = {
+      mode: "ready",
+      t: 0,
+      score: 0,
+      kills: 0,
+      spawnTimer: 0,
+      shootTimer: 0,
+      hitFlash: 0,
+      weapon: 2,
+      ammo: { 3: 0, 4: 0, 5: 0 },
+      weaponPickups: [],
+      pickupTimer: 0,
+      massSpawnTimer: 0,
+      knifeTimer: 0,
+      // 핵 플래그
+      hack: {
+        god: false,      // G: 무적 모드
+        infiniteAmmo: false, // A: 무한 탄약
+        nuke: false,     // N: 전체 폭파
+        speed: false,    // S: 스피드 업
+      },
+      bugs: [],
+      bullets: [],
+      particles: [],
+      player: null,
+    };
+
+    function resize() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W;
+      canvas.height = H;
+      if (state.player) {
+        state.player.x = clamp(state.player.x, 20, W - 20);
+        state.player.y = clamp(state.player.y, 20, H - 20);
+      }
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function resetGame() {
+      state.mode = "playing";
+      state.t = 0;
+      state.score = 0;
+      state.kills = 0;
+      state.spawnTimer = 0;
+      state.massSpawnTimer = 0;
+      state.shootTimer = 0;
+      state.hitFlash = 0;
+      state.weapon = 2;
+      state.ammo = { 3: 0, 4: 0, 5: 0 };
+      state.weaponPickups = [];
+      state.pickupTimer = 0;     // 리셋 후 첫 픽업은 5초 후
+      state.knifeTimer = 0;
+      state.bugs = [];
+      state.bullets = [];
+      state.particles = [];
+      state.player = {
+        x: W * 0.5,
+        y: H * 0.5,
+        r: 16,
+        speed: PLAYER_SPEED,
+        hp: 5,
+        inv: 0,
+      };
+      ui.endOverlay.style.display = "none";
+      // 게임 시작 시 즉시 픽업 3개 스폰
+      for (let i = 0; i < 3; i++) spawnPickup();
+    }
+
+    function spawnBug() {
+      const edge = Math.floor(Math.random() * 4);
+      const margin = 40;
+      let x = 0;
+      let y = 0;
+
+      if (edge === 0) {
+        x = -margin;
+        y = Math.random() * H;
+      } else if (edge === 1) {
+        x = W + margin;
+        y = Math.random() * H;
+      } else if (edge === 2) {
+        x = Math.random() * W;
+        y = -margin;
+      } else {
+        x = Math.random() * W;
+        y = H + margin;
+      }
+
+      const lifeFactor = 1 + Math.min(2.5, state.t / 1800);
+      const rawSpeed = (1.2 + Math.random() * 1.6) * lifeFactor;
+      const bugSpeedCap = state.player ? state.player.speed : PLAYER_SPEED;
+      state.bugs.push({
+        x,
+        y,
+        r: 10 + Math.random() * 6,
+        speed: Math.min(rawSpeed, bugSpeedCap),
+        hp: Math.random() < 0.2 ? 2 : 1,
+        wobble: Math.random() * Math.PI * 2,
+      });
+    }
+
+    function fireBullet(p, angle, speed, type) {
+      const nx = Math.cos(angle);
+      const ny = Math.sin(angle);
+      state.bullets.push({
+        x: p.x + nx * (p.r + 4),
+        y: p.y + ny * (p.r + 4),
+        vx: nx * speed,
+        vy: ny * speed,
+        r: type === "homing" ? 6 : type === "rapid" ? 3 : 4,
+        life: type === "homing" ? 240 : 80,
+        type,
+      });
+    }
+
+    function shoot() {
+      const p = state.player;
+      const w = state.weapon;
+      const dx = mouse.x - p.x;
+      const dy = mouse.y - p.y;
+      const baseAngle = Math.atan2(dy, dx);
+
+      if (w === 1) {
+        // 나이프 — 근접 범위 공격
+        state.knifeTimer = 14;
+        for (let i = state.bugs.length - 1; i >= 0; i--) {
+          if (Math.hypot(state.bugs[i].x - p.x, state.bugs[i].y - p.y) < 85) {
+            state.bugs[i].hp -= 2;
+            if (state.bugs[i].hp <= 0) killBug(i);
+          }
+        }
+        for (let i = 0; i < 14; i++) {
+          const a = baseAngle + (Math.random() - 0.5) * 1.6;
+          const s = 3 + Math.random() * 5;
+          state.particles.push({
+            x: p.x + Math.cos(a) * 28,
+            y: p.y + Math.sin(a) * 28,
+            vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+            life: 8 + Math.random() * 8, color: "#e0f7ff",
+          });
+        }
+        return;
+      }
+
+      if (w === 2) {
+        // 권총 — 단발
+        fireBullet(p, baseAngle, 11, "pistol");
+        for (let i = 0; i < 3; i++) {
+          state.particles.push({
+            x: p.x, y: p.y,
+            vx: Math.cos(baseAngle) * (2 + Math.random() * 3) + (Math.random() - 0.5) * 1.4,
+            vy: Math.sin(baseAngle) * (2 + Math.random() * 3) + (Math.random() - 0.5) * 1.4,
+            life: 10 + Math.random() * 10, color: "#ffe0b2",
+          });
+        }
+        return;
+      }
+
+      if (w === 3) {
+        // 산탄총 — 3발 포물선
+        if (state.ammo[3] <= 0) { state.weapon = 2; return; }
+        for (const offset of [-0.38, 0, 0.38]) {
+          fireBullet(p, baseAngle + offset, 10, "triple");
+        }
+        state.ammo[3] -= 1;
+        return;
+      }
+
+      if (w === 4) {
+        // 유도탄
+        if (state.ammo[4] <= 0) { state.weapon = 2; return; }
+        fireBullet(p, baseAngle, 7, "homing");
+        state.ammo[4] -= 1;
+        return;
+      }
+
+      if (w === 5) {
+        // 연발총
+        if (state.ammo[5] <= 0) { state.weapon = 2; return; }
+        fireBullet(p, baseAngle, 14, "rapid");
+        state.ammo[5] -= 1;
+        return;
+      }
+    }
+
+    function killBug(index) {
+      const b = state.bugs[index];
+      state.score += 10;
+      state.kills += 1;
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 1 + Math.random() * 3;
+        state.particles.push({
+          x: b.x,
+          y: b.y,
+          vx: Math.cos(a) * s,
+          vy: Math.sin(a) * s,
+          life: 20 + Math.random() * 15,
+          color: "#95ff80",
+        });
+      }
+      state.bugs.splice(index, 1);
+    }
+
+    function updatePlayer() {
+      const p = state.player;
+      let dx = 0;
+      let dy = 0;
+
+      if (keys.has("ArrowLeft")) dx -= 1;
+      if (keys.has("ArrowRight")) dx += 1;
+      if (keys.has("ArrowUp")) dy -= 1;
+      if (keys.has("ArrowDown")) dy += 1;
+
+      if (dx !== 0 || dy !== 0) {
+        const d = Math.hypot(dx, dy);
+        dx /= d;
+        dy /= d;
+      }
+
+      p.x = clamp(p.x + dx * p.speed, p.r, W - p.r);
+      p.y = clamp(p.y + dy * p.speed, p.r, H - p.r);
+
+      if (p.inv > 0) p.inv -= 1;
+    }
+
+    function updateBugs() {
+      const p = state.player;
+
+      for (let i = state.bugs.length - 1; i >= 0; i--) {
+        const b = state.bugs[i];
+        b.wobble += 0.09;
+        const dx = p.x - b.x;
+        const dy = p.y - b.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        const sway = Math.sin(b.wobble) * 0.35;
+        const px = -ny * sway;
+        const py = nx * sway;
+
+        b.x += (nx + px) * b.speed;
+        b.y += (ny + py) * b.speed;
+
+        if (dist < p.r + b.r && p.inv <= 0) {
+          if (!state.hack.god) {
+            p.hp -= 1;
+            p.inv = 50;
+            state.hitFlash = 10;
+            if (p.hp <= 0) {
+              state.mode = "over";
+              ui.finalScore.textContent = "최종 점수: " + state.score;
+              ui.endOverlay.style.display = "grid";
+            }
+          } else {
+            p.inv = 20; // 무적이어도 잠긄 충복 방지
+          }
+        }
+      }
+    }
+
+    function updateBullets() {
+      for (let i = state.bullets.length - 1; i >= 0; i--) {
+        const blt = state.bullets[i];
+
+        // 포물선 중력 (산탄총)
+        if (blt.type === "triple") {
+          blt.vy += 0.18;
+        }
+
+        // 유도탄: 가장 가까운 적을 향해 선회
+        if (blt.type === "homing" && state.bugs.length > 0) {
+          let nearest = null;
+          let nearDist = Infinity;
+          for (const b of state.bugs) {
+            const d = Math.hypot(b.x - blt.x, b.y - blt.y);
+            if (d < nearDist) { nearDist = d; nearest = b; }
+          }
+          if (nearest) {
+            const targetAngle = Math.atan2(nearest.y - blt.y, nearest.x - blt.x);
+            const currentAngle = Math.atan2(blt.vy, blt.vx);
+            let diff = targetAngle - currentAngle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            const newAngle = currentAngle + Math.sign(diff) * Math.min(Math.abs(diff), 0.09);
+            const speed = Math.hypot(blt.vx, blt.vy);
+            blt.vx = Math.cos(newAngle) * speed;
+            blt.vy = Math.sin(newAngle) * speed;
+          }
+        }
+
+        blt.x += blt.vx;
+        blt.y += blt.vy;
+        blt.life -= 1;
+
+        if (blt.life <= 0 || blt.x < -20 || blt.x > W + 20 || blt.y < -20 || blt.y > H + 20) {
+          state.bullets.splice(i, 1);
+          continue;
+        }
+
+        let removed = false;
+        for (let j = state.bugs.length - 1; j >= 0; j--) {
+          const b = state.bugs[j];
+          const hit = Math.hypot(blt.x - b.x, blt.y - b.y) < blt.r + b.r;
+          if (hit) {
+            b.hp -= 1;
+            if (b.hp <= 0) {
+              killBug(j);
+            } else {
+              state.score += 4;
+            }
+            state.bullets.splice(i, 1);
+            removed = true;
+            break;
+          }
+        }
+
+        if (removed) continue;
+      }
+    }
+
+    function updateParticles() {
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        p.life -= 1;
+        if (p.life <= 0) state.particles.splice(i, 1);
+      }
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, W, H);
+
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#2a3352");
+      g.addColorStop(1, "#12172a");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      const step = 70;
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < W; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      for (let y = 0; y < H; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+    }
+
+    function drawPlayer() {
+      const p = state.player;
+      const aim = Math.atan2(mouse.y - p.y, mouse.x - p.x);
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(aim);
+
+      ctx.fillStyle = p.inv > 0 && p.inv % 4 < 2 ? "#f4d58d" : "#ffe8b6";
+      ctx.beginPath();
+      ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#111";
+      ctx.fillRect(2, -4, 20, 8);
+
+      ctx.fillStyle = "#f57f17";
+      ctx.beginPath();
+      ctx.arc(4, -4, 3, 0, Math.PI * 2);
+      ctx.arc(4, 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawBugs() {
+      for (const b of state.bugs) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+
+        ctx.fillStyle = b.hp > 1 ? "#89ff61" : "#7adf58";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.r * 1.2, b.r * 0.9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "#3d7c2a";
+        ctx.lineWidth = 2;
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-b.r, i * 4);
+          ctx.lineTo(-b.r - 7, i * 4 - 6);
+          ctx.moveTo(b.r, i * 4);
+          ctx.lineTo(b.r + 7, i * 4 - 6);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "#111";
+        ctx.beginPath();
+        ctx.arc(b.r * 0.35, -2, 2, 0, Math.PI * 2);
+        ctx.arc(b.r * 0.35, 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    function drawBullets() {
+      for (const b of state.bullets) {
+        ctx.save();
+        if (b.type === "homing") {
+          ctx.fillStyle = "#ce93d8";
+          ctx.shadowColor = "#ab47bc";
+          ctx.shadowBlur = 10;
+        } else if (b.type === "triple") {
+          ctx.fillStyle = "#ffb74d";
+        } else if (b.type === "rapid") {
+          ctx.fillStyle = "#40e0ff";
+        } else {
+          ctx.fillStyle = "#ffca73";
+        }
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawParticles() {
+      for (const p of state.particles) {
+        const alpha = Math.max(0, Math.min(1, p.life / 20));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawCrosshair() {
+      const x = mouse.x;
+      const y = mouse.y;
+      ctx.save();
+      ctx.strokeStyle = "#ffd166";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 12, 0, Math.PI * 2);
+      ctx.moveTo(x - 18, y);
+      ctx.lineTo(x - 8, y);
+      ctx.moveTo(x + 8, y);
+      ctx.lineTo(x + 18, y);
+      ctx.moveTo(x, y - 18);
+      ctx.lineTo(x, y - 8);
+      ctx.moveTo(x, y + 8);
+      ctx.lineTo(x, y + 18);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ── 픽업 시스템 ────────────────────────────────────────────────
+    const PICKUP_COLORS = { 3: "#ff9800", 4: "#ab47bc", 5: "#00bcd4" };
+    const PICKUP_LABELS = { 3: "산탄", 4: "유도", 5: "연발" };
+    const PICKUP_AMMO   = { 3: 30,        4: 15,        5: 50 };
+
+    function spawnPickup() {
+      const types = [3, 4, 5];
+      const type = types[Math.floor(Math.random() * types.length)];
+      state.weaponPickups.push({
+        x: 70 + Math.random() * (W - 140),
+        y: 70 + Math.random() * (H - 140),
+        type,
+        r: 15,
+        life: 720,      // 12초 후 사라짐
+      });
+    }
+
+    function updatePickups() {
+      const p = state.player;
+      for (let i = state.weaponPickups.length - 1; i >= 0; i--) {
+        const pk = state.weaponPickups[i];
+        pk.life -= 1;
+        if (pk.life <= 0) { state.weaponPickups.splice(i, 1); continue; }
+        if (Math.hypot(p.x - pk.x, p.y - pk.y) < p.r + pk.r) {
+          state.ammo[pk.type] = (state.ammo[pk.type] || 0) + PICKUP_AMMO[pk.type];
+          state.weapon = pk.type;   // 집으면 자동으로 해당 무기로 전환
+          state.weaponPickups.splice(i, 1);
+        }
+      }
+    }
+
+    function drawPickups() {
+      for (const pk of state.weaponPickups) {
+        const alpha = pk.life < 150 ? pk.life / 150 : 1;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        // 발광 효과
+        ctx.shadowColor = PICKUP_COLORS[pk.type];
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = PICKUP_COLORS[pk.type];
+        ctx.beginPath();
+        ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // 라벨
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 8px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(PICKUP_LABELS[pk.type], pk.x, pk.y);
+        ctx.restore();
+      }
+    }
+
+    function drawKnifeSlash() {
+      if (state.knifeTimer <= 0) return;
+      const p = state.player;
+      const aim = Math.atan2(mouse.y - p.y, mouse.x - p.x);
+      const alpha = state.knifeTimer / 14;
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.75;
+      ctx.strokeStyle = "#e0f7ff";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 65, aim - 0.65, aim + 0.65);
+      ctx.stroke();
+      ctx.strokeStyle = "#aaddff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x + Math.cos(aim) * 22, p.y + Math.sin(aim) * 22);
+      ctx.lineTo(p.x + Math.cos(aim) * 72, p.y + Math.sin(aim) * 72);
+      ctx.stroke();
+      ctx.restore();
+      state.knifeTimer -= 1;
+    }
+
+    // ── UI ────────────────────────────────────────────────────────
+    function updateUI() {
+      const sec = Math.floor(state.t / 60);
+      ui.score.textContent = "Score: " + state.score;
+      ui.time.textContent = "Time: " + sec + "s";
+      ui.hp.textContent = "HP: " + state.player.hp;
+      ui.bugs.textContent = "Bugs: " + state.bugs.length;
+
+      const wNames = { 1: "🔪 나이프", 2: "🔫 권총", 3: "🔫 산탄총", 4: "🚀 유도탄", 5: "⚡ 연발총" };
+      ui.weaponName.textContent = wNames[state.weapon] || "🔫 권총";
+
+      const w = state.weapon;
+      if (state.hack.infiniteAmmo) {
+        state.ammo[3] = 999; state.ammo[4] = 999; state.ammo[5] = 999;
+      }
+      if (w === 1 || w === 2) {
+        ui.ammoDisplay.textContent = "탄약 ∞";
+      } else {
+        const cnt = state.ammo[w] || 0;
+        const icon = w === 4 ? "🚀" : "🔫";
+        ui.ammoDisplay.textContent = icon + " × " + cnt;
+      }
+
+      // 핵 HUD
+      const hackOn = [];
+      if (state.hack.god)          hackOn.push("★GOD");
+      if (state.hack.infiniteAmmo) hackOn.push("∞AMMO");
+      if (state.hack.speed)        hackOn.push("⚡SPD");
+      if (hackOn.length > 0) {
+        ui.weaponName.textContent += "  [🛡️ " + hackOn.join(" ") + "]";
+      }
+    }
+
+    function step() {
+      requestAnimationFrame(step);
+
+      drawBackground();
+
+      if (state.mode !== "playing") {
+        drawCrosshair();
+        return;
+      }
+
+      state.t += 1;
+      state.score += 0.05 + Math.min(0.25, state.t / 6000);
+      state.score = Math.floor(state.score);
+
+      updatePlayer();
+
+      const spawnInterval = Math.max(14, 54 - Math.floor(state.t / 180));
+      state.spawnTimer += 1;
+      if (state.spawnTimer >= spawnInterval) {
+        state.spawnTimer = 0;
+        spawnBug();
+      }
+
+      // 1초(60프레임)마다 몬스터 100마리 생성
+      state.massSpawnTimer += 1;
+      if (state.massSpawnTimer >= 60) {
+        state.massSpawnTimer = 0;
+        for (let i = 0; i < 100; i++) {
+          spawnBug();
+        }
+      }
+
+      // 무기 픽업 스폰 (5초마다)
+      state.pickupTimer += 1;
+      if (state.pickupTimer >= 300) {
+        state.pickupTimer = 0;
+        spawnPickup();
+      }
+
+      // 핵: 뉵크 (전체 폭파)
+      if (state.hack.nuke) {
+        state.hack.nuke = false;
+        for (let i = state.bugs.length - 1; i >= 0; i--) killBug(i);
+        for (let i = 0; i < 30; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.random() * Math.min(W, H) * 0.45;
+          state.particles.push({
+            x: W/2 + Math.cos(a)*r, y: H/2 + Math.sin(a)*r,
+            vx: Math.cos(a)*(1+Math.random()*3), vy: Math.sin(a)*(1+Math.random()*3),
+            life: 40 + Math.random()*30, color: ['#ff4444','#ff8800','#ffee00'][Math.floor(Math.random()*3)],
+          });
+        }
+      }
+
+      // 핵: 스피드 업
+      if (state.player) state.player.speed = state.hack.speed ? PLAYER_SPEED * 2.5 : PLAYER_SPEED;
+
+      if (mouse.down) {
+        const cooldown = state.weapon === 1 ? 10 : state.weapon === 5 ? 2 : 7;
+        if (state.shootTimer <= 0) {
+          shoot();
+          state.shootTimer = cooldown;
+        }
+      }
+
+      if (state.shootTimer > 0) state.shootTimer -= 1;
+      if (state.hitFlash > 0) state.hitFlash -= 1;
+
+      updateBullets();
+      updateBugs();
+      updateParticles();
+      updatePickups();
+
+      drawPickups();
+      drawBullets();
+      drawParticles();
+      drawBugs();
+      drawPlayer();
+      drawKnifeSlash();
+      drawCrosshair();
+
+      if (state.hitFlash > 0) {
+        ctx.fillStyle = "rgba(215, 38, 61, 0.2)";
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      updateUI();
+    }
+
+    window.addEventListener("resize", resize);
+
+    window.addEventListener("keydown", (e) => {
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+        e.preventDefault();
+      }
+      keys.add(e.key);
+
+      // 무기 전환 (1~5)
+      if (state.mode === "playing") {
+        if (e.key === "1") state.weapon = 1;
+        else if (e.key === "2") state.weapon = 2;
+        else if (e.key === "3") state.weapon = 3;
+        else if (e.key === "4") state.weapon = 4;
+        else if (e.key === "5") state.weapon = 5;
+        // 핵 단쳐키
+        else if (e.key === "g" || e.key === "G") state.hack.god          = !state.hack.god;
+        else if (e.key === "a" || e.key === "A") state.hack.infiniteAmmo = !state.hack.infiniteAmmo;
+        else if (e.key === "n" || e.key === "N") state.hack.nuke         = true;
+        else if (e.key === "v" || e.key === "V") state.hack.speed        = !state.hack.speed;
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys.delete(e.key);
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+    });
+
+    window.addEventListener("mousedown", (e) => {
+      if (e.button === 0) {
+        mouse.down = true;
+      }
+    });
+
+    window.addEventListener("mouseup", (e) => {
+      if (e.button === 0) {
+        mouse.down = false;
+      }
+    });
+
+    ui.startBtn.addEventListener("click", () => {
+      ui.startOverlay.style.display = "none";
+      resetGame();
+    });
+
+    ui.restartBtn.addEventListener("click", () => {
+      resetGame();
+    });
+
+    resize();
+    state.player = { x: W * 0.5, y: H * 0.5, r: 16, speed: PLAYER_SPEED, hp: 5, inv: 0 };
+    updateUI();
+    step();
+  </script>
+</body>
+</html>
