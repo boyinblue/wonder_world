@@ -1,0 +1,2007 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Card Duel</title>
+  <style>
+    :root {
+      --bg-1: #16213e;
+      --bg-2: #0f172a;
+      --panel: rgba(245, 241, 232, 0.96);
+      --ink: #191919;
+      --muted: #5c5c5c;
+      --accent: #ef6c3b;
+      --accent-2: #1fa59b;
+      --danger: #d13b46;
+      --line: #ddd3c0;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: #fff;
+      background:
+        radial-gradient(900px 500px at 10% 10%, #26466e 0%, transparent 55%),
+        radial-gradient(900px 500px at 90% 90%, #183b50 0%, transparent 60%),
+        linear-gradient(140deg, var(--bg-1), var(--bg-2));
+      overflow: hidden;
+    }
+
+    .board {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .topbar,
+    .bottombar {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(8, 13, 24, 0.38);
+      backdrop-filter: blur(4px);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: repeat(1, minmax(0, 1fr));
+      gap: 12px;
+      padding: 12px 14px;
+      align-items: center;
+    }
+
+    .metric {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      min-height: 60px;
+    }
+
+    .metric small {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: #d8dff0;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .metric strong {
+      font-size: 20px;
+      line-height: 1.05;
+    }
+
+    .metric .hint {
+      font-size: 12px;
+      color: #b8c4d8;
+      margin-top: 4px;
+    }
+
+    .arena {
+      display: grid;
+      grid-template-columns: 1fr min(380px, 32vw) 1fr;
+      gap: 14px;
+      align-items: center;
+      min-height: 0;
+    }
+
+    .portal-back {
+      position: fixed;
+      left: 14px;
+      top: 14px;
+      z-index: 60;
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      text-decoration: none;
+      font-size: 24px;
+      font-weight: 900;
+      color: #fff;
+      background: rgba(8, 14, 28, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+      transition: transform 140ms ease, background 140ms ease;
+    }
+
+    .portal-back:hover {
+      transform: translateY(-1px);
+      background: rgba(18, 27, 47, 0.88);
+    }
+
+    .opponent-zone,
+    .player-zone,
+    .pile-zone {
+      border-radius: 20px;
+      background: rgba(10, 18, 32, 0.48);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: var(--shadow);
+      height: 100%;
+      min-height: 260px;
+      padding: 14px;
+      display: grid;
+      align-content: center;
+      gap: 12px;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    .turn-active {
+      border-color: rgba(255, 224, 138, 0.92);
+      box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.30), var(--shadow);
+      transform: translateY(-1px);
+    }
+
+    .zone-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      color: #e5ecff;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-size: 12px;
+      opacity: 0.95;
+    }
+
+    .hand,
+    .opp-hand {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      min-height: 120px;
+    }
+
+    .opp-hand {
+      opacity: 0.95;
+    }
+
+    .thinking-indicator {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      min-height: 28px;
+      margin-top: 4px;
+      color: #ffe8a8;
+      font-weight: 900;
+      letter-spacing: 1px;
+      opacity: 0.96;
+    }
+
+    .thinking-indicator .q {
+      display: inline-block;
+      font-size: 22px;
+      text-shadow: 0 0 14px rgba(255, 218, 132, 0.45);
+      animation: think-bob 900ms ease-in-out infinite;
+    }
+
+    .thinking-indicator .q:nth-child(2) { animation-delay: 120ms; }
+    .thinking-indicator .q:nth-child(3) { animation-delay: 240ms; }
+
+    @keyframes think-bob {
+      0%, 100% { transform: translateY(0); opacity: 0.45; }
+      50% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    .card {
+      width: 84px;
+      height: 122px;
+      border-radius: 16px;
+      border: 2px solid rgba(0, 0, 0, 0.35);
+      box-shadow: 0 12px 20px rgba(0, 0, 0, 0.28);
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+      cursor: pointer;
+      transform-origin: center bottom;
+      transition: transform 140ms ease, box-shadow 140ms ease, outline-color 140ms ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px 10px 8px;
+    }
+
+    .card:hover { transform: translateY(-8px) rotate(-1deg); }
+    .card.selected {
+      outline: 4px solid #fff6a5;
+      outline-offset: 2px;
+      transform: translateY(-10px) scale(1.05);
+    }
+
+    .card-back {
+      cursor: default;
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.02)),
+        repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0 9px, rgba(255,255,255,0.03) 9px 18px),
+        linear-gradient(180deg, #233a6a, #142140);
+    }
+
+    .card.empty-slot {
+      cursor: default;
+      border-style: dashed;
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.05);
+      box-shadow: none;
+      opacity: 0.28;
+    }
+
+    .card.empty-slot:hover {
+      transform: none;
+    }
+
+    .card-face .corner {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.0;
+    }
+
+    .card-face .center {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.4px;
+    }
+
+    .card-face .sub {
+      font-size: 11px;
+      text-align: center;
+      opacity: 0.92;
+    }
+
+    .red { background: linear-gradient(180deg, #ff6a57, #c92b25); color: #fff8f8; }
+    .blue { background: linear-gradient(180deg, #4fa7ff, #1762c9); color: #f7fbff; }
+    .yellow { background: linear-gradient(180deg, #ffd85d, #d69b00); color: #1b1600; }
+    .green { background: linear-gradient(180deg, #64e1a7, #1c9e61); color: #f4fff7; }
+    .wild { background: linear-gradient(180deg, #5848d5, #1d133b); color: #fbf8ff; }
+
+    .pile-zone {
+      grid-column: 2;
+      grid-template-columns: 1fr 1fr;
+      align-content: center;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .stack {
+      width: 124px;
+      height: 172px;
+      border-radius: 18px;
+      position: relative;
+    }
+
+    .stack .caption {
+      margin-top: 8px;
+      color: #dfe7ff;
+      font-size: 13px;
+      letter-spacing: 0.6px;
+    }
+
+    .stack .pile-card {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 92px;
+      height: 132px;
+      border-radius: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      box-shadow: 0 16px 24px rgba(0, 0, 0, 0.32);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 10px;
+      font-weight: 900;
+    }
+
+    .stack .pile-card.clickable {
+      cursor: pointer;
+      transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+    }
+
+    .stack .pile-card.clickable:hover {
+      transform: translateY(-3px) scale(1.02);
+      filter: brightness(1.08);
+    }
+
+    .stack .pile-card small {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      opacity: 0.92;
+    }
+
+    .stack .pile-card.card-face {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: stretch;
+      text-align: left;
+      padding: 10px 10px 8px;
+    }
+
+    .stack .pile-card.card-face .center {
+      text-align: center;
+    }
+
+    .draw-pile {
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.13), rgba(255,255,255,0.03)),
+        repeating-linear-gradient(45deg, rgba(255,255,255,0.12) 0 10px, rgba(255,255,255,0.03) 10px 20px),
+        linear-gradient(180deg, #233a6a, #142140);
+      transform: translate(-12px, 8px) rotate(-8deg);
+    }
+
+    .discard-pile {
+      transform: translate(12px, -8px) rotate(8deg);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 14px;
+      justify-content: end;
+    }
+
+    .message {
+      min-height: 54px;
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #fff;
+      line-height: 1.35;
+    }
+
+    .button,
+    .button-secondary,
+    .color-chip {
+      border: 0;
+      border-radius: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease;
+    }
+
+    .button:hover,
+    .button-secondary:hover,
+    .color-chip:hover { transform: translateY(-2px); }
+
+    .button {
+      background: #f6f1e7;
+      color: #1d1d1d;
+      padding: 12px 14px;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+    }
+
+    .button-primary {
+      background: #111;
+      color: #fff;
+    }
+
+    .button-danger {
+      background: #d84a4a;
+      color: #fff;
+    }
+
+    .button-secondary {
+      background: rgba(255, 255, 255, 0.10);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 12px 14px;
+    }
+
+    .button:disabled,
+    .button-secondary:disabled,
+    .color-chip:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .player-zone {
+      grid-column: 1 / -1;
+      min-height: 250px;
+    }
+
+    .player-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 8px;
+      color: #edf2ff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-size: 12px;
+    }
+
+    .key-strip {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin: 6px 0 12px;
+    }
+
+    .key-chip {
+      width: 84px;
+      border-radius: 10px;
+      padding: 6px 0;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: #10203c;
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(221,231,255,0.86));
+      border: 1px solid rgba(255,255,255,0.55);
+    }
+
+    .key-chip.ready {
+      background: linear-gradient(180deg, #fff1a8, #ffd46a);
+      color: #352800;
+      box-shadow: 0 0 0 2px rgba(255, 230, 120, 0.22);
+    }
+
+    .turn-timer {
+      color: #ffe08a;
+      font-weight: 900;
+    }
+
+    .player-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      color: #dfe7ff;
+      font-size: 13px;
+    }
+
+    .player-meta strong { color: #fff; }
+
+    .color-choice {
+      display: none;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .color-chip {
+      padding: 10px 12px;
+      min-width: 88px;
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    .chip-red { background: linear-gradient(180deg, #ff6a57, #c92b25); }
+    .chip-blue { background: linear-gradient(180deg, #4fa7ff, #1762c9); }
+    .chip-yellow { background: linear-gradient(180deg, #ffd85d, #d69b00); color: #1b1600; }
+    .chip-green { background: linear-gradient(180deg, #64e1a7, #1c9e61); }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      padding: 20px;
+    }
+
+    .panel {
+      width: min(560px, 100%);
+      border-radius: 20px;
+      border: 2px solid #efe2c8;
+      background: linear-gradient(180deg, rgba(245, 241, 232, 0.98), rgba(238, 232, 220, 0.96));
+      color: #111;
+      padding: 22px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+      text-align: center;
+    }
+
+    .panel h1 {
+      margin: 0 0 10px;
+      font-size: clamp(32px, 7vw, 58px);
+      text-transform: lowercase;
+    }
+
+    .panel p {
+      margin: 8px 0;
+      color: #303030;
+      line-height: 1.5;
+    }
+
+    .panel .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .panel .actions a,
+    .panel .actions button {
+      text-decoration: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      border: 2px solid #111;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .panel .actions button {
+      background: #111;
+      color: #fff;
+    }
+
+    .panel .actions a {
+      color: #111;
+      background: transparent;
+    }
+
+    .hidden { display: none !important; }
+
+    .center-toast {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      min-width: 260px;
+      max-width: min(90vw, 520px);
+      text-align: center;
+      padding: 14px 18px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: rgba(6, 11, 22, 0.85);
+      color: #f0f5ff;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.36);
+      opacity: 0;
+      transition: opacity 180ms ease;
+      pointer-events: none;
+    }
+
+    .center-toast.show {
+      opacity: 1;
+    }
+
+    @media (max-width: 920px) {
+      body { overflow-y: auto; }
+      .board {
+        height: auto;
+        min-height: 100vh;
+        overflow: hidden;
+      }
+      .arena { grid-template-columns: 1fr; }
+      .pile-zone { grid-template-columns: 1fr 1fr; }
+      .topbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .controls { grid-template-columns: auto auto; justify-content: center; }
+      .player-zone { min-height: 280px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="portal-back" href="index.html" aria-label="포털로 이동" title="포털로">&#8592;</a>
+  <div class="board">
+    <section class="topbar">
+      <div class="metric">
+        <small>Current Rule</small>
+        <strong id="ruleLabel">색 / 숫자 매칭</strong>
+        <div class="hint" id="extraLabel">조커 후 1장 추가 가능.</div>
+      </div>
+    </section>
+
+    <section class="arena">
+      <div class="opponent-zone" id="cpuZone">
+        <div class="zone-label">
+          <span>computer</span>
+          <span id="cpuDrawnInfo">턴 보류 없음</span>
+        </div>
+        <div class="opp-hand" id="cpuHand"></div>
+        <div class="thinking-indicator hidden" id="cpuThinking" aria-hidden="true">
+          <span class="q">?</span>
+          <span class="q">?</span>
+          <span class="q">?</span>
+        </div>
+      </div>
+
+      <div class="pile-zone">
+        <div>
+          <div class="stack">
+            <div class="pile-card draw-pile clickable" id="drawPileCard" title="클릭해서 카드 뽑기">
+              <div>DRAW</div>
+              <small>한 장 뽑기</small>
+            </div>
+          </div>
+          <div class="caption">카드 더미</div>
+        </div>
+        <div>
+          <div class="stack">
+            <div class="pile-card discard-pile" id="discardPileCard">
+              <div class="corner" id="discardCorner">S</div>
+              <div class="center" id="discardText">START</div>
+              <small id="discardSub">시작 카드</small>
+            </div>
+          </div>
+          <div class="caption">버린 카드</div>
+        </div>
+      </div>
+
+    </section>
+
+    <section class="player-zone" id="playerZone">
+      <div class="player-header">
+        <div>player hand</div>
+        <div class="player-meta">
+          <span>선택: <strong id="selectedInfo">없음</strong></span>
+          <span>보너스: <strong id="bonusInfo">없음</strong></span>
+          <span>방향: <strong id="reverseInfo">정방향</strong></span>
+        </div>
+      </div>
+      <div class="key-strip" id="keyStrip"></div>
+      <div class="hand" id="playerHand"></div>
+      <div class="color-choice" id="colorChoice">
+        <span style="color:#dfe7ff;font-weight:700;letter-spacing:0.4px;">조커 색 선택:</span>
+        <button class="color-chip chip-red" data-color="red">빨강</button>
+        <button class="color-chip chip-blue" data-color="blue">파랑</button>
+        <button class="color-chip chip-yellow" data-color="yellow">노랑</button>
+        <button class="color-chip chip-green" data-color="green">초록</button>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button class="button-secondary" id="endBtn">턴 종료</button>
+    </section>
+
+  </div>
+
+  <div id="animLayer" style="position:fixed;inset:0;pointer-events:none;z-index:25;"></div>
+  <div id="centerToast" class="center-toast hidden"></div>
+
+  <div class="overlay hidden" id="noPlayableOverlay">
+    <div class="panel">
+      <p id="noPlayableText">더 이상 낼 카드가 없습니다. 카드를 한 장 뽑습니다.</p>
+      <div class="actions">
+        <button id="noPlayableConfirmBtn">확인</button>
+      </div>
+    </div>
+  </div>
+    <div class="overlay hidden" id="skipTurnOverlay">
+      <div class="panel">
+        <p id="skipTurnText">내 턴이 건너뛰어 컴퓨터가 한 번 더 행동합니다.</p>
+        <div class="actions">
+          <button id="skipTurnConfirmBtn">확인</button>
+        </div>
+      </div>
+    </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <h1>card duel</h1>
+      <p>컴퓨터와 1:1 카드 대결을 합니다. 색이나 숫자가 맞는 카드를 내세요.</p>
+      <p>못 내면 1장을 뽑아야 하고, 뒤로 돌아가기 / 2배 / 조커 카드가 포함됩니다.</p>
+      <p>조커를 내면 바로 한 장 더 낼 수 있고, 카드를 클릭하면 즉시 내기됩니다.</p>
+      <div class="actions">
+        <button id="startBtn">게임 시작</button>
+        <a href="index.html">메인으로</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="endOverlay">
+    <div class="panel">
+      <h1 id="endTitle">game over</h1>
+      <p id="endText">최종 결과</p>
+      <div class="actions">
+        <button id="restartBtn">다시 시작</button>
+        <a href="index.html">메인으로</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if (window.__CARD_DUEL_RUNTIME__ && typeof window.__CARD_DUEL_RUNTIME__.dispose === "function") {
+      window.__CARD_DUEL_RUNTIME__.dispose();
+    }
+
+    const colors = ["red", "blue", "yellow", "green"];
+    const colorNames = { red: "빨강", blue: "파랑", yellow: "노랑", green: "초록" };
+    const valueNames = { reverse: "REVERSE", draw2: "+2", joker: "JOKER" };
+    const rankValues = [1, 2, 3, 4, 5, 6, 7, 8, 9, "J", "Q", "K"];
+    const CPU_THINK_DELAY_MS = 5000;
+    const DEAL_STEP_MS = 120;
+    const CARD_FLIGHT_MS = 620;
+    const FORCED_DRAW_END_TURN_DELAY_MS = 1000;
+    const NO_PLAYABLE_POPUP_DELAY_MS = 5000;
+    const TURN_KEY_LABELS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+
+    let audioCtx = null;
+
+    function ensureAudio() {
+      if (audioCtx) return audioCtx;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return null;
+      audioCtx = new AudioContext();
+      return audioCtx;
+    }
+
+    function playTone(frequencies, duration = 0.12, wave = "sine", volume = 0.06) {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const tones = Array.isArray(frequencies) ? frequencies : [frequencies];
+      const now = ctx.currentTime;
+      tones.forEach((frequency, index) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = wave;
+        osc.frequency.setValueAtTime(frequency, now + index * 0.012);
+        gain.gain.setValueAtTime(volume, now + index * 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + index * 0.012 + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + index * 0.012);
+        osc.stop(now + index * 0.012 + duration);
+      });
+    }
+
+    function sfx(type) {
+      if (type === "play") playTone([660, 880], 0.10, "square", 0.05);
+      else if (type === "draw") playTone([420, 520], 0.12, "triangle", 0.05);
+      else if (type === "turn") playTone([300, 450, 600], 0.08, "sine", 0.045);
+      else if (type === "joker") playTone([520, 780, 1040], 0.11, "square", 0.04);
+      else if (type === "tick") playTone(980, 0.07, "square", 0.045);
+      else if (type === "todo") playTone([740, 980], 0.10, "triangle", 0.05);
+      else if (type === "error") playTone(140, 0.14, "square", 0.04);
+    }
+
+    function rectFor(el) {
+      return el ? el.getBoundingClientRect() : null;
+    }
+
+    function animateCard(fromRect, toRect, card, extraClass = "", hiddenFace = false) {
+      if (!fromRect || !toRect) return;
+      const layer = document.getElementById("animLayer");
+      if (!layer) return;
+      const clone = document.createElement("div");
+      clone.className = hiddenFace
+        ? `card card-back ${extraClass}`.trim()
+        : `card card-face ${card.color === "wild" ? "wild" : card.color} ${extraClass}`.trim();
+      clone.style.position = "fixed";
+      clone.style.left = `${fromRect.left}px`;
+      clone.style.top = `${fromRect.top}px`;
+      clone.style.width = `${fromRect.width}px`;
+      clone.style.height = `${fromRect.height}px`;
+      clone.style.margin = "0";
+      clone.style.zIndex = "100";
+      clone.style.transition = "transform 560ms cubic-bezier(.2,.9,.2,1), opacity 560ms ease";
+      clone.style.pointerEvents = "none";
+      clone.innerHTML = hiddenFace
+        ? `
+        <div class="corner">?</div>
+        <div class="center">CARD</div>
+        <div class="sub">HIDDEN</div>
+      `
+        : `
+        <div class="corner">${cardCornerLabel(card)}</div>
+        <div class="center">${cardLabel(card)}</div>
+        <div class="sub">${cardSubtitle(card)}</div>
+      `;
+      layer.appendChild(clone);
+      const dx = toRect.left - fromRect.left;
+      const dy = toRect.top - fromRect.top;
+      const sx = toRect.width / fromRect.width;
+      const sy = toRect.height / fromRect.height;
+      requestAnimationFrame(() => {
+        clone.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+        clone.style.opacity = "0.95";
+      });
+      window.setTimeout(() => clone.remove(), CARD_FLIGHT_MS);
+    }
+
+    function drawCardsToHand(targetHand, count, isComputerTarget, reason) {
+      const drawnCards = [];
+      const fromRect = rectFor(ui.drawPileCard);
+      for (let i = 0; i < count; i++) {
+        const card = drawOne();
+        if (!card) continue;
+        let slotIndex = targetHand.findIndex(existingCard => !existingCard);
+        if (slotIndex < 0) {
+          slotIndex = targetHand.length;
+          targetHand.push(card);
+        } else {
+          targetHand[slotIndex] = card;
+        }
+        card.turnKey = getKeyboardLabel(slotIndex);
+        drawnCards.push({ card, slotIndex });
+      }
+      if (!drawnCards.length) return drawnCards;
+      renderHand();
+      updateHud();
+      drawnCards.forEach((entry, i) => {
+        const handEl = isComputerTarget ? ui.cpuHand : ui.playerHand;
+        const toRect = rectFor(handEl.children[entry.slotIndex]);
+        window.setTimeout(() => animateCard(fromRect, toRect, entry.card, "draw-flight", isComputerTarget), i * 120);
+      });
+      debugLog("draw_cards", {
+        reason,
+        target: isComputerTarget ? "computer" : "player",
+        count: drawnCards.length,
+      });
+      return drawnCards;
+    }
+
+    function cardCornerLabel(card) {
+      if (!card) return "";
+      if (card.value === "joker") return "J";
+      if (isRankValue(card.value)) return String(card.value);
+      if (card.value === "reverse") return "R";
+      if (card.value === "draw2") return "+2";
+      return "";
+    }
+
+    const ui = {
+      ruleLabel: document.getElementById("ruleLabel"),
+      extraLabel: document.getElementById("extraLabel"),
+      cpuDrawnInfo: document.getElementById("cpuDrawnInfo"),
+      cpuZone: document.getElementById("cpuZone"),
+      cpuThinking: document.getElementById("cpuThinking"),
+      playerZone: document.getElementById("playerZone"),
+      playerHand: document.getElementById("playerHand"),
+      cpuHand: document.getElementById("cpuHand"),
+      discardCorner: document.getElementById("discardCorner"),
+      discardText: document.getElementById("discardText"),
+      discardSub: document.getElementById("discardSub"),
+      discardPileCard: document.getElementById("discardPileCard"),
+      selectedInfo: document.getElementById("selectedInfo"),
+      bonusInfo: document.getElementById("bonusInfo"),
+      reverseInfo: document.getElementById("reverseInfo"),
+      colorChoice: document.getElementById("colorChoice"),
+      endBtn: document.getElementById("endBtn"),
+      keyStrip: document.getElementById("keyStrip"),
+      drawPileCard: document.getElementById("drawPileCard"),
+      centerToast: document.getElementById("centerToast"),
+      noPlayableOverlay: document.getElementById("noPlayableOverlay"),
+      noPlayableText: document.getElementById("noPlayableText"),
+      noPlayableConfirmBtn: document.getElementById("noPlayableConfirmBtn"),
+        skipTurnOverlay: document.getElementById("skipTurnOverlay"),
+        skipTurnText: document.getElementById("skipTurnText"),
+        skipTurnConfirmBtn: document.getElementById("skipTurnConfirmBtn"),
+      startOverlay: document.getElementById("startOverlay"),
+      startBtn: document.getElementById("startBtn"),
+      endOverlay: document.getElementById("endOverlay"),
+      endTitle: document.getElementById("endTitle"),
+      endText: document.getElementById("endText"),
+      restartBtn: document.getElementById("restartBtn"),
+    };
+
+    const state = {
+      started: false,
+      gameOver: false,
+      setupSeq: 0,
+      turn: "player",
+      selectedIndex: -1,
+      extraPlay: false,
+      pendingSkip: null,
+      pendingSkipReason: null,
+      playerDrew: false,
+      cpuDrew: false,
+      deck: [],
+      discard: [],
+      player: [],
+      cpu: [],
+      drawTimer: null,
+      cpuActionTimers: [],
+      timeoutEndTimer: null,
+      autoEndTimer: null,
+      noPlayablePromptTimer: null,
+      centerToastTimer: null,
+      endOverlayTimer: null,
+      topColor: null,
+      topValue: null,
+      activeColor: null,
+      activeValue: null,
+      score: 0,
+      reverseDirection: 1,
+      playedThisTurn: false,
+      turnSeq: 0,
+      cpuExtraPlay: false,
+      noPlayablePromptOpen: false,
+        skipTurnPromptOpen: false,
+      pendingSkipDrawCount: 0,
+      debugLogs: [],
+      debugMax: 350,
+    };
+
+    function debugLog(event, detail = {}) {
+      const entry = {
+        t: new Date().toISOString(),
+        seq: state.turnSeq,
+        turn: state.turn,
+        event,
+        detail,
+      };
+      state.debugLogs.push(entry);
+      if (state.debugLogs.length > state.debugMax) state.debugLogs.shift();
+      try { console.debug("[CardDuel]", entry); } catch {}
+    }
+
+    function exportDebugLogs() {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        topRule: { color: state.activeColor, value: state.activeValue },
+        logs: state.debugLogs,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `card_duel_debug_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setLog("디버그 로그 파일을 저장했습니다.");
+      debugLog("debug_export", { count: state.debugLogs.length });
+    }
+
+    function clearDebugLogs() {
+      state.debugLogs = [];
+      debugLog("debug_clear", {});
+    }
+
+    function clearComputerTimers() {
+      if (state.drawTimer) {
+        clearTimeout(state.drawTimer);
+        state.drawTimer = null;
+      }
+      if (state.cpuActionTimers && state.cpuActionTimers.length) {
+        for (const tid of state.cpuActionTimers) clearTimeout(tid);
+        state.cpuActionTimers = [];
+      }
+    }
+
+    function clearAllRuntimeTimers() {
+      clearComputerTimers();
+      if (state.timeoutEndTimer) {
+        clearTimeout(state.timeoutEndTimer);
+        state.timeoutEndTimer = null;
+      }
+      if (state.autoEndTimer) {
+        clearTimeout(state.autoEndTimer);
+        state.autoEndTimer = null;
+      }
+      if (state.noPlayablePromptTimer) {
+        clearTimeout(state.noPlayablePromptTimer);
+        state.noPlayablePromptTimer = null;
+      }
+      if (state.centerToastTimer) {
+        clearTimeout(state.centerToastTimer);
+        state.centerToastTimer = null;
+      }
+      if (state.endOverlayTimer) {
+        clearTimeout(state.endOverlayTimer);
+        state.endOverlayTimer = null;
+      }
+      if (ui.centerToast) {
+        ui.centerToast.classList.remove("show");
+        ui.centerToast.classList.add("hidden");
+      }
+      hideNoPlayableModal();
+      hideSkipTurnModal();
+      if (ui.cpuThinking) {
+        ui.cpuThinking.classList.add("hidden");
+      }
+      const layer = document.getElementById("animLayer");
+      if (layer) layer.innerHTML = "";
+    }
+
+    function showCenterToast(text, duration = 2000) {
+      if (!ui.centerToast) return;
+      ui.centerToast.textContent = text;
+      ui.centerToast.classList.remove("hidden");
+      // Force style flush so transition plays when showing repeatedly.
+      void ui.centerToast.offsetWidth;
+      ui.centerToast.classList.add("show");
+      if (state.centerToastTimer) {
+        clearTimeout(state.centerToastTimer);
+        state.centerToastTimer = null;
+      }
+      state.centerToastTimer = setTimeout(() => {
+        ui.centerToast.classList.remove("show");
+        state.centerToastTimer = setTimeout(() => {
+          ui.centerToast.classList.add("hidden");
+          state.centerToastTimer = null;
+        }, 180);
+      }, duration);
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => window.setTimeout(resolve, ms));
+    }
+
+    function animateDeckRefill(count) {
+      const fromRect = rectFor(ui.discardPileCard);
+      const toRect = rectFor(ui.drawPileCard);
+      if (!fromRect || !toRect || count <= 0) return;
+      const burst = Math.min(8, count);
+      for (let i = 0; i < burst; i++) {
+        window.setTimeout(() => {
+          // Refill uses hidden card backs so the old discard contents stay concealed.
+          animateCard(fromRect, toRect, { color: "wild", value: "joker" }, "", true);
+        }, i * 70);
+      }
+    }
+
+    async function dealInitialHandsAnimated(setupSeq) {
+      const fromRect = rectFor(ui.drawPileCard);
+      for (let round = 0; round < 7; round++) {
+        if (setupSeq !== state.setupSeq) return;
+        for (const isComputerTarget of [false, true]) {
+          if (setupSeq !== state.setupSeq) return;
+          const card = drawOne();
+          if (!card) return;
+          const targetHand = isComputerTarget ? state.cpu : state.player;
+          const nextIndex = targetHand.length;
+          targetHand.push(card);
+          renderHand();
+          updateHud();
+          const handEl = isComputerTarget ? ui.cpuHand : ui.playerHand;
+          const toRect = rectFor(handEl.children[nextIndex]);
+          animateCard(fromRect, toRect, card, "", isComputerTarget);
+          sfx("draw");
+          await delay(DEAL_STEP_MS);
+        }
+      }
+    }
+
+    function renderKeyStrip() {
+      if (!ui.keyStrip) return;
+      ui.keyStrip.innerHTML = "";
+      let visibleIndex = 0;
+      for (let i = 0; i < state.player.length; i++) {
+        const card = state.player[i];
+        if (!card) continue;
+        const chip = document.createElement("div");
+        chip.className = "key-chip";
+        const keyLabel = state.turn === "player" ? getKeyboardLabel(visibleIndex) : "";
+        if (state.turn === "player") {
+          card.turnKey = keyLabel;
+          visibleIndex += 1;
+          chip.title = `키보드 ${keyLabel} 키를 누르면 해당 카드가 즉시 제출됩니다.`;
+          chip.setAttribute("aria-label", chip.title);
+          if (isPlayable(card)) chip.classList.add("ready");
+        }
+        chip.textContent = keyLabel;
+        ui.keyStrip.appendChild(chip);
+      }
+    }
+
+    function getKeyboardLabel(index) {
+      return TURN_KEY_LABELS[index] || "-";
+    }
+
+    function assignPlayerTurnKeys() {
+      let visibleIndex = 0;
+      for (let i = 0; i < state.player.length; i++) {
+        if (state.player[i]) {
+          state.player[i].turnKey = getKeyboardLabel(visibleIndex);
+          visibleIndex += 1;
+        }
+      }
+    }
+
+    function makeCard(color, value) {
+      return { color, value };
+    }
+
+    function makeDeck() {
+      const deck = [];
+      for (const color of colors) {
+        for (const rank of rankValues) deck.push(makeCard(color, rank));
+      }
+
+      // Special cards are global totals, not per color.
+      const reverseColors = shuffle([...colors]).slice(0, 2);
+      const draw2Colors = shuffle([...colors]).slice(0, 2);
+      for (const color of reverseColors) deck.push(makeCard(color, "reverse"));
+      for (const color of draw2Colors) deck.push(makeCard(color, "draw2"));
+
+      for (let i = 0; i < 2; i++) deck.push(makeCard("wild", "joker"));
+      return shuffle(deck);
+    }
+
+    function shuffle(list) {
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+      return list;
+    }
+
+    function refillDeckIfNeeded() {
+      if (state.deck.length > 0) return;
+      if (state.discard.length <= 1) return;
+      const top = state.discard[state.discard.length - 1];
+      const rest = state.discard.slice(0, -1);
+      animateDeckRefill(rest.length);
+      state.deck = shuffle(rest);
+      state.discard = [top];
+    }
+
+    function drawOne() {
+      refillDeckIfNeeded();
+      return state.deck.length ? state.deck.pop() : null;
+    }
+
+    function isRankValue(value) {
+      return typeof value === "number" || value === "J" || value === "Q" || value === "K";
+    }
+
+    function cardLabel(card) {
+      if (isRankValue(card.value)) return String(card.value);
+      if (card.value === "joker") return "JOKER";
+      if (card.value === "reverse") return "REV";
+      if (card.value === "draw2") return "+2";
+      return "?";
+    }
+
+    function cardSubtitle(card) {
+      if (card.value === "joker") return "아무 카드 + 1장 추가";
+      if (card.value === "reverse") return "진행 방향 전환";
+      if (card.value === "draw2") return "상대 2장 뽑기";
+      return colorNames[card.color];
+    }
+
+    function isPlayable(card) {
+      if (!card) return false;
+      if (state.turn === "player" && state.extraPlay) return true;
+      if (state.turn === "computer" && state.cpuExtraPlay) return true;
+      if (state.activeColor === null && state.activeValue === null) return true;
+      if (card.value === "joker") return true;
+      if (state.activeColor && card.color === state.activeColor) return true;
+      if (state.activeValue !== null && card.value === state.activeValue) return true;
+      return false;
+    }
+
+    function countCards(hand) {
+      return hand.filter(Boolean).length;
+    }
+
+    function compactHand(hand) {
+      return hand.filter(Boolean);
+    }
+
+    function setLog(text) {
+      showCenterToast(text, 2000);
+      debugLog("log", { text });
+    }
+
+    function getSkipReasonText(skippedTarget, reason) {
+      const whoText = skippedTarget === "computer" ? "상대" : "내";
+      if (reason && reason.type === "draw2") {
+        return `${whoText} 턴이 +2 효과로 건너뛰어졌습니다. (2장 드로우)`;
+      }
+      if (reason && reason.type === "reverse") {
+        return `${whoText} 턴이 REVERSE 효과로 건너뛰어졌습니다.`;
+      }
+      return `${whoText} 턴이 건너뛰어졌습니다.`;
+    }
+
+    function setTurn(turn) {
+      state.turnSeq += 1;
+      state.turn = turn;
+      hideNoPlayableModal();
+      hideSkipTurnModal();
+      clearComputerTimers();
+      if (state.timeoutEndTimer) {
+        clearTimeout(state.timeoutEndTimer);
+        state.timeoutEndTimer = null;
+      }
+      if (turn === "player") {
+        state.player = compactHand(state.player);
+        state.playedThisTurn = false;
+        state.selectedIndex = -1;
+      } else if (turn === "computer") {
+        state.cpu = compactHand(state.cpu);
+      }
+      if (ui.cpuDrawnInfo) ui.cpuDrawnInfo.textContent = state.cpuDrew ? "이 턴에 1장 뽑음" : "턴 보류 없음";
+      if (ui.playerZone) ui.playerZone.classList.toggle("turn-active", turn === "player");
+      if (ui.cpuZone) ui.cpuZone.classList.toggle("turn-active", turn === "computer");
+      if (ui.cpuThinking) ui.cpuThinking.classList.toggle("hidden", turn !== "computer");
+      // Refresh card/key visuals immediately when turn changes.
+      renderHand();
+      updateButtons();
+      updateHud();
+      if (turn === "player") assignPlayerTurnKeys();
+      debugLog("turn_change", { turn });
+      if (turn === "computer" && state.started && !state.gameOver) {
+        const seq = state.turnSeq;
+        state.drawTimer = setTimeout(() => computerTurn(seq), CPU_THINK_DELAY_MS);
+        sfx("turn");
+      } else if (turn === "player" && state.started && !state.gameOver) {
+        // If a player turn starts with no playable card, auto-pass with message.
+        window.setTimeout(() => {
+          if (!state.started || state.gameOver || state.turn !== "player") return;
+          maybeAutoPassNoPlayable();
+        }, 120);
+      }
+    }
+
+    function updateHud() {
+      const cpuCount = countCards(state.cpu);
+      if (ui.cpuDrawnInfo) ui.cpuDrawnInfo.textContent = state.cpuDrew ? `이 턴에 1장 뽑음 · ${cpuCount}장` : `${cpuCount}장`;
+      ui.selectedInfo.textContent = state.selectedIndex >= 0 && state.player[state.selectedIndex]
+        ? `${state.selectedIndex + 1}. ${describeCard(state.player[state.selectedIndex])}`
+        : "없음";
+      ui.bonusInfo.textContent = state.extraPlay ? "조커 보너스" : "없음";
+      ui.reverseInfo.textContent = state.reverseDirection === 1 ? "정방향" : "역방향";
+      ui.ruleLabel.textContent = state.activeColor
+        ? `${colorNames[state.activeColor]} / ${state.activeValue === null ? "JOKER" : describeValue(state.activeValue)}`
+        : "색 / 숫자 매칭";
+      ui.extraLabel.textContent = state.extraPlay || state.cpuExtraPlay
+        ? "조커 보너스: 다음 카드는 어떤 색이든 낼 수 있습니다."
+        : getPlayableGuideText();
+
+      if (state.discard.length) {
+        const top = state.discard[state.discard.length - 1];
+        const viewColor = top.value === "joker" ? (state.activeColor || "wild") : top.color;
+        ui.discardPileCard.className = `pile-card discard-pile card-face ${viewColor}`;
+        ui.discardCorner.textContent = cardCornerLabel(top);
+        ui.discardText.textContent = top.value === "joker" ? "JOKER" : describeValue(top.value);
+        ui.discardSub.textContent = top.value === "joker"
+          ? `${colorNames[state.activeColor] || "보너스 대기"}`
+          : top.value === "reverse"
+            ? "REVERSE · 번호 없음"
+            : top.value === "draw2"
+              ? "+2"
+              : colorNames[top.color];
+      }
+    }
+
+    function describeValue(value) {
+      if (typeof value === "number") return String(value);
+      return valueNames[value] || value;
+    }
+
+    function describeCard(card) {
+      if (!card) return "없음";
+      if (card.value === "joker") return "JOKER";
+      return `${colorNames[card.color]} ${describeValue(card.value)}`;
+    }
+
+        function getPlayableGuideText() {
+          if (state.activeValue === "reverse") {
+            return "REVERSE 위에는 같은 색 카드, REVERSE 카드, 또는 JOKER를 낼 수 있습니다. (번호 매칭은 없음)";
+          }
+          if (state.activeValue === "draw2") {
+            return "+2 위에는 같은 색 카드, +2 카드, 또는 JOKER를 낼 수 있습니다.";
+          }
+          if (state.extraPlay || state.cpuExtraPlay) {
+            return "조커 보너스 턴: 아무 카드나 낸 뒤 그 카드 색/값으로 규칙이 이어집니다.";
+          }
+          if (state.activeValue === null) {
+            return "JOKER 상태입니다. 아무 카드나 낼 수 있습니다.";
+          }
+          return "같은 색 또는 같은 숫자 카드를 낼 수 있습니다.";
+        }
+
+    function renderHand() {
+      if (state.turn === "player") assignPlayerTurnKeys();
+      ui.playerHand.innerHTML = "";
+      let visibleIndex = 0;
+      for (let index = 0; index < state.player.length; index++) {
+        const card = state.player[index];
+        const el = document.createElement("div");
+        if (card) {
+          el.className = `card card-face ${card.color === "wild" ? "wild" : card.color}`;
+          if (index === state.selectedIndex) el.classList.add("selected");
+          const keyLabel = state.turn === "player" ? getKeyboardLabel(visibleIndex) : "";
+          if (state.turn === "player") {
+            card.turnKey = keyLabel;
+            visibleIndex += 1;
+          }
+          el.title = state.turn === "player"
+            ? `마우스 클릭 또는 키보드 ${keyLabel} 키로 이 카드를 즉시 제출합니다.`
+            : `마우스 클릭으로 카드를 선택할 수 있습니다.`;
+          el.innerHTML = `
+            <div class="corner">${keyLabel}</div>
+            <div class="center">${cardLabel(card)}</div>
+            <div class="sub">${cardSubtitle(card)}</div>
+          `;
+          el.addEventListener("click", () => {
+            if (state.turn !== "player") return;
+            state.selectedIndex = index;
+            renderHand();
+            updateHud();
+            updateButtons();
+            if (isPlayable(card)) submitSelectedCard();
+            else setLog(`선택됨: ${describeCard(card)}. 지금은 낼 수 없습니다.`);
+          });
+        } else {
+          el.className = "card card-face empty-slot";
+          el.innerHTML = `
+            <div class="corner">&nbsp;</div>
+            <div class="center">&nbsp;</div>
+            <div class="sub">&nbsp;</div>
+          `;
+          el.title = "빈 슬롯";
+        }
+        ui.playerHand.appendChild(el);
+      }
+
+      ui.cpuHand.innerHTML = "";
+      state.cpu.forEach(() => {
+        const back = document.createElement("div");
+        back.className = "card card-back";
+        back.innerHTML = `
+          <div class="corner">?</div>
+          <div class="center">CARD</div>
+          <div class="sub">HIDDEN</div>
+        `;
+        ui.cpuHand.appendChild(back);
+      });
+
+      renderKeyStrip();
+    }
+
+    function updateButtons() {
+      const canEnd = state.turn === "player"
+        && !state.gameOver
+        && !state.extraPlay
+        && (state.playedThisTurn || state.playerDrew);
+      if (ui.endBtn) ui.endBtn.disabled = !canEnd;
+      if (ui.colorChoice) ui.colorChoice.style.display = "none";
+    }
+
+    function hideNoPlayableModal() {
+      if (!ui.noPlayableOverlay) return;
+      ui.noPlayableOverlay.classList.add("hidden");
+      state.noPlayablePromptOpen = false;
+      if (state.noPlayablePromptTimer) {
+        clearTimeout(state.noPlayablePromptTimer);
+        state.noPlayablePromptTimer = null;
+      }
+    }
+
+    function hideSkipTurnModal() {
+      if (!ui.skipTurnOverlay) return;
+      ui.skipTurnOverlay.classList.add("hidden");
+      state.skipTurnPromptOpen = false;
+    }
+
+    function promptSkipTurnContinue(reasonText) {
+      if (!state.started || state.gameOver) return;
+      if (state.skipTurnPromptOpen) return;
+      if (ui.skipTurnText) ui.skipTurnText.textContent = reasonText || "내 턴이 건너뛰어 컴퓨터가 한 번 더 행동합니다.";
+      if (ui.skipTurnOverlay) ui.skipTurnOverlay.classList.remove("hidden");
+      state.skipTurnPromptOpen = true;
+    }
+
+    function onSkipTurnConfirm() {
+      hideSkipTurnModal();
+      if (!state.started || state.gameOver) return;
+      const drawCount = state.pendingSkipDrawCount || 0;
+      state.pendingSkipDrawCount = 0;
+      if (drawCount > 0) {
+        drawCardsToHand(state.player, drawCount, false, "skip_draw2_confirm");
+        sfx("draw");
+        setLog(`내 턴이 +2 효과로 건너뛰어 ${drawCount}장을 뽑습니다.`);
+        state.autoEndTimer = window.setTimeout(() => {
+          state.autoEndTimer = null;
+          if (!state.started || state.gameOver) return;
+          setTurn("computer");
+          setLog("내 턴이 건너뛰어 컴퓨터가 한 번 더 행동합니다.");
+        }, CARD_FLIGHT_MS + 180);
+        return;
+      }
+      setTurn("computer");
+      setLog("내 턴이 건너뛰어 컴퓨터가 한 번 더 행동합니다.");
+    }
+
+    function onNoPlayableConfirm() {
+      hideNoPlayableModal();
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      if (state.player.some(isPlayable)) return;
+      const drawnList = drawCardsToHand(state.player, 1, false, "no_playable_forced_draw");
+      const drawnEntry = drawnList[0] || null;
+      if (drawnEntry) {
+        state.playerDrew = true;
+        sfx("draw");
+        setLog(`더 이상 낼 카드가 없습니다. 카드를 한 장 뽑습니다. (${describeCard(drawnEntry.card)})`);
+      } else {
+        setLog("더 이상 낼 카드가 없습니다. 뽑을 카드가 없어 턴을 넘깁니다.");
+      }
+      state.autoEndTimer = window.setTimeout(() => {
+        state.autoEndTimer = null;
+        if (!state.started || state.gameOver || state.turn !== "player") return;
+        endPlayerTurn();
+      }, FORCED_DRAW_END_TURN_DELAY_MS);
+    }
+
+    function promptNoPlayableDrawAndEnd(delayMs = 0) {
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      if (state.noPlayablePromptOpen) return;
+      if (state.player.some(isPlayable)) return;
+      const runPrompt = () => {
+        state.noPlayablePromptTimer = null;
+        if (!state.started || state.gameOver || state.turn !== "player") return;
+        if (state.noPlayablePromptOpen) return;
+        if (state.player.some(isPlayable)) return;
+        if (ui.noPlayableText) ui.noPlayableText.textContent = "더 이상 낼 카드가 없습니다. 카드를 한 장 뽑습니다.";
+        if (ui.noPlayableOverlay) ui.noPlayableOverlay.classList.remove("hidden");
+        state.noPlayablePromptOpen = true;
+      };
+
+      if (delayMs > 0) {
+        if (state.noPlayablePromptTimer) clearTimeout(state.noPlayablePromptTimer);
+        state.noPlayablePromptTimer = window.setTimeout(runPrompt, delayMs);
+      } else {
+        runPrompt();
+      }
+    }
+
+    function selectCard(index) {
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      state.selectedIndex = index;
+      renderHand();
+      updateHud();
+      updateButtons();
+      if (isPlayable(state.player[index])) {
+        setLog(`선택됨: ${describeCard(state.player[index])}. 클릭/숫자키로 즉시 제출됩니다.`);
+      } else {
+        setLog(`선택됨: ${describeCard(state.player[index])}. 지금은 낼 수 없습니다.`);
+      }
+    }
+
+    async function startGame() {
+      clearAllRuntimeTimers();
+      state.setupSeq += 1;
+      const setupSeq = state.setupSeq;
+      state.started = false;
+      state.gameOver = false;
+      state.turn = "player";
+      state.selectedIndex = -1;
+      state.extraPlay = false;
+      state.pendingSkip = null;
+      state.pendingSkipReason = null;
+      state.pendingSkipDrawCount = 0;
+      state.playerDrew = false;
+      state.cpuDrew = false;
+      state.deck = makeDeck();
+      state.discard = [];
+      state.player = [];
+      state.cpu = [];
+      state.topColor = null;
+      state.topValue = null;
+      state.activeColor = null;
+      state.activeValue = null;
+      state.score = 0;
+      state.reverseDirection = 1;
+      state.playedThisTurn = false;
+      state.cpuExtraPlay = false;
+
+      ui.startOverlay.classList.add("hidden");
+      ui.endOverlay.classList.add("hidden");
+      ui.endOverlay.style.display = "none";
+      renderKeyStrip();
+      renderHand();
+      updateHud();
+
+      await dealInitialHandsAnimated(setupSeq);
+      if (setupSeq !== state.setupSeq) return;
+
+      let starter = drawOne();
+      while (starter && starter.value === "joker") {
+        state.deck.unshift(starter);
+        shuffle(state.deck);
+        starter = drawOne();
+      }
+      if (!starter) return;
+      state.discard.push(starter);
+      state.topColor = starter.color;
+      state.topValue = starter.value;
+      if (starter.value === "reverse" || starter.value === "draw2") {
+        state.activeColor = starter.color;
+        state.activeValue = starter.value;
+      } else {
+        state.activeColor = starter.color;
+        state.activeValue = isRankValue(starter.value) ? starter.value : null;
+      }
+
+      state.started = true;
+      setLog("게임 시작! 색 또는 숫자가 맞는 카드를 내세요.");
+      renderKeyStrip();
+      renderHand();
+      updateHud();
+      setTurn("player");
+      sfx("turn");
+      debugLog("game_start", { playerCards: state.player.length, cpuCards: state.cpu.length });
+    }
+
+    function endGame(win) {
+      state.gameOver = true;
+      clearAllRuntimeTimers();
+      ui.endOverlay.classList.add("hidden");
+      ui.endOverlay.style.display = "none";
+      if (win) sfx("todo");
+      state.endOverlayTimer = window.setTimeout(() => {
+        ui.endOverlay.style.display = "grid";
+        ui.endOverlay.classList.remove("hidden");
+        ui.endTitle.textContent = win ? "you win" : "game over";
+        ui.endText.textContent = win
+          ? `컴퓨터를 먼저 비웠습니다. 남은 카드: ${countCards(state.cpu)}장`
+          : `내 손에 남은 카드: ${countCards(state.player)}장`;
+        setLog(win ? "승리! 다시 한 판 도전할 수 있습니다." : "패배. 다시 시작할 수 있습니다.");
+        debugLog("game_end", { win });
+        updateHud();
+        updateButtons();
+      }, win ? 1000 : 0);
+    }
+
+    function applyJokerColor(color) {
+      state.activeColor = color;
+      state.activeValue = null;
+      ui.discardSub.textContent = `JOKER · ${colorNames[color]}`;
+      ui.colorChoice.style.display = "none";
+      setLog(`조커 색 선택: ${colorNames[color]}. 추가로 1장 더 낼 수 있습니다.`);
+      updateHud();
+      updateButtons();
+    }
+
+    function playCard(index, fromComputer = false) {
+      if (fromComputer && state.turn !== "computer") return false;
+      if (!fromComputer && state.turn !== "player") return false;
+      const hand = fromComputer ? state.cpu : state.player;
+      const card = hand[index];
+      if (!card) return false;
+      if (fromComputer || isPlayable(card)) {
+        const fromRect = fromComputer ? rectFor(ui.cpuHand.children[index]) : rectFor(ui.playerHand.children[index]);
+        const toRect = rectFor(ui.discardPileCard || document.getElementById("discardPileCard"));
+        if (fromComputer) hand.splice(index, 1);
+        else hand[index] = null;
+        if (!fromComputer) hideNoPlayableModal();
+        state.discard.push(card);
+        state.topColor = card.color;
+        state.topValue = card.value;
+        if (!fromComputer) state.playedThisTurn = true;
+        if (!fromComputer) state.selectedIndex = -1;
+        debugLog("play_card", {
+          by: fromComputer ? "computer" : "player",
+          card: describeCard(card),
+          handAfter: hand.length,
+        });
+
+        if (card.value === "joker") {
+          state.activeColor = null;
+          state.activeValue = null;
+          if (!fromComputer) {
+            state.extraPlay = true;
+            if (countCards(hand) === 0) {
+              endGame(true);
+              return true;
+            }
+            setLog("조커를 냈습니다. 색 선택 없이 한 장 더 내세요. 다음 낸 카드 색으로 규칙이 정해집니다.");
+            renderHand();
+            updateHud();
+            updateButtons();
+            return true;
+          }
+          state.cpuExtraPlay = true;
+          setLog("컴퓨터가 조커를 냈습니다. 컴퓨터는 한 장 더 냅니다.");
+        } else {
+          state.activeColor = card.color;
+          state.activeValue = typeof card.value === "number" ? card.value : card.value;
+          if (!fromComputer && state.extraPlay) state.extraPlay = false;
+          if (fromComputer && state.cpuExtraPlay) state.cpuExtraPlay = false;
+        }
+
+        if (card.value === "reverse") {
+          state.reverseDirection *= -1;
+          state.pendingSkip = null;
+          state.pendingSkipReason = null;
+          state.pendingSkipDrawCount = 0;
+          setLog(`${fromComputer ? "컴퓨터" : "내가"} REVERSE! 진행 방향이 바뀌고 턴이 넘어갑니다.`);
+        } else if (card.value === "draw2") {
+          if (fromComputer) {
+            state.pendingSkipDrawCount = 2;
+          } else {
+            drawCardsToHand(state.cpu, 2, true, "draw2");
+          }
+          state.pendingSkip = fromComputer ? "player" : "computer";
+          state.pendingSkipReason = { type: "draw2", by: fromComputer ? "computer" : "player" };
+          setLog(`${fromComputer ? "컴퓨터" : "내가"} 2배 카드를 냈습니다. 상대가 2장을 뽑습니다.`);
+        } else if (typeof card.value === "number") {
+          setLog(`${fromComputer ? "컴퓨터" : "내가"} ${describeCard(card)} 카드를 냈습니다.`);
+        }
+
+        animateCard(fromRect, toRect, card, fromComputer ? "" : "");
+        if (card.value === "joker") sfx("joker");
+        else sfx("play");
+
+        if (!fromComputer && state.extraPlay && card.value === "joker") {
+          setLog("조커 보너스 중입니다. 카드 1장을 더 낼 수 있습니다.");
+          updateButtons();
+          renderHand();
+          updateHud();
+          return true;
+        }
+
+        renderHand();
+        updateHud();
+        updateButtons();
+        if (countCards(hand) === 0) {
+          // Render empty hand first so the last card visually disappears before game-over overlay.
+          window.setTimeout(() => endGame(!fromComputer), 120);
+          return true;
+        }
+
+        return true;
+      }
+      return false;
+    }
+
+    function endPlayerTurn() {
+      state.playerDrew = false;
+      state.selectedIndex = -1;
+      state.extraPlay = false;
+      if (state.autoEndTimer) {
+        clearTimeout(state.autoEndTimer);
+        state.autoEndTimer = null;
+      }
+      if (state.timeoutEndTimer) {
+        clearTimeout(state.timeoutEndTimer);
+        state.timeoutEndTimer = null;
+      }
+      if (state.pendingSkip === "computer") {
+        const reason = state.pendingSkipReason;
+        state.pendingSkip = null;
+        state.pendingSkipReason = null;
+        const reasonText = getSkipReasonText("computer", reason);
+        setLog(reasonText);
+        showCenterToast(reasonText, 2000);
+        state.autoEndTimer = window.setTimeout(() => {
+          state.autoEndTimer = null;
+          if (!state.started || state.gameOver) return;
+          setTurn("player");
+          setLog("상대 턴이 건너뛰어져서 다시 내 차례입니다.");
+          renderHand();
+        }, 1200);
+        return;
+      }
+      setTurn("computer");
+      renderHand();
+    }
+
+    function maybeAutoPassNoPlayable() {
+      if (!state.started || state.gameOver || state.turn !== "player") return false;
+      if (state.extraPlay) return false;
+      if (state.player.some(isPlayable)) return false;
+      if (state.autoEndTimer) clearTimeout(state.autoEndTimer);
+
+      if (state.playedThisTurn) {
+        setLog("더 낼 수 있는 카드가 없습니다. [턴 종료] 버튼으로 턴을 넘기거나 잠시 후 안내 팝업을 확인하세요.");
+        promptNoPlayableDrawAndEnd(NO_PLAYABLE_POPUP_DELAY_MS);
+        return true;
+      }
+
+      // At turn start, wait before showing the forced-draw popup.
+      promptNoPlayableDrawAndEnd(NO_PLAYABLE_POPUP_DELAY_MS);
+      return true;
+    }
+
+    function handlePlayerTimeout() {
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      const autoPlayable = state.player
+        .map((card, index) => ({ card, index }))
+        .filter(entry => isPlayable(entry.card));
+
+      if (autoPlayable.length > 0) {
+        autoPlayable.sort((a, b) => {
+          const pa = typeof a.card.value === "number"
+            ? 0
+            : a.card.value === "reverse"
+              ? 1
+              : a.card.value === "draw2"
+                ? 2
+                : 3;
+          const pb = typeof b.card.value === "number"
+            ? 0
+            : b.card.value === "reverse"
+              ? 1
+              : b.card.value === "draw2"
+                ? 2
+                : 3;
+          return pa - pb;
+        });
+        const choice = autoPlayable[0];
+        state.selectedIndex = choice.index;
+        setLog(`시간 초과! 컴퓨터가 내 패에서 ${describeCard(choice.card)} 카드를 자동 제출했습니다.`);
+        const played = playCard(choice.index, false);
+        if (played && !state.gameOver) {
+          state.timeoutEndTimer = window.setTimeout(() => {
+            state.timeoutEndTimer = null;
+            if (!state.started || state.gameOver || state.turn !== "player") return;
+            endPlayerTurn();
+          }, 760);
+          return;
+        }
+      }
+
+      if (state.playedThisTurn) {
+        setLog("시간 초과로 턴이 자동 종료되었습니다.");
+        endPlayerTurn();
+        return;
+      }
+
+      const penalty = drawOne();
+      if (penalty) {
+        const fromRect = rectFor(ui.drawPileCard);
+        const previousCount = state.player.length;
+        state.player.push(penalty);
+        renderHand();
+        const toRect = rectFor(ui.playerHand.querySelectorAll('.card')[previousCount]);
+        animateCard(fromRect, toRect, penalty, "draw-flight");
+        sfx("draw");
+        setLog(`시간 초과! 카드를 1장 먹고 턴이 넘어갑니다. (${describeCard(penalty)})`);
+        // 패널티 카드 이동 애니메이션이 보인 뒤 턴을 넘긴다.
+        state.timeoutEndTimer = window.setTimeout(() => {
+          state.timeoutEndTimer = null;
+          if (!state.started || state.gameOver || state.turn !== "player") return;
+          endPlayerTurn();
+        }, 620);
+        return;
+      }
+
+      setLog("시간 초과! 더 뽑을 카드가 없어 턴만 넘어갑니다.");
+      endPlayerTurn();
+    }
+
+    function computerTurn(expectedSeq = state.turnSeq) {
+      if (expectedSeq !== state.turnSeq) return;
+      if (!state.started || state.gameOver || state.turn !== "computer") return;
+      if (state.pendingSkip === "player") {
+        const reason = state.pendingSkipReason;
+        state.pendingSkip = null;
+        state.pendingSkipReason = null;
+        const reasonText = getSkipReasonText("player", reason);
+        debugLog("player_skip_notice", { reasonText, reason });
+        promptSkipTurnContinue(reasonText);
+        return;
+      }
+
+      const playable = state.cpu
+        .map((card, index) => ({ card, index }))
+        .filter(entry => isPlayable(entry.card));
+
+      if (playable.length === 0) {
+        const drawnList = drawCardsToHand(state.cpu, 1, true, "cpu_no_playable");
+        state.cpuDrew = true;
+        if (drawnList.length > 0) {
+          setLog("컴퓨터가 낼 카드가 없어 1장을 뽑고 턴을 넘깁니다.");
+        } else {
+          setLog("컴퓨터가 더 뽑을 카드가 없어 턴만 넘깁니다.");
+        }
+        const seq = state.turnSeq;
+        const tid = setTimeout(() => {
+          state.cpuActionTimers = state.cpuActionTimers.filter(x => x !== tid);
+          if (seq !== state.turnSeq) return;
+          if (!state.started || state.gameOver || state.turn !== "computer") return;
+          endComputerTurn();
+        }, 760);
+        state.cpuActionTimers.push(tid);
+        return;
+      }
+
+      const priority = entry => {
+        const value = entry.card.value;
+        if (value === "draw2") return 0;
+        if (value === "reverse") return 1;
+        if (value === "joker") return 2;
+        if (typeof value === "number") return 3;
+        return 4;
+      };
+      playable.sort((a, b) => priority(a) - priority(b));
+      const choice = playable[0];
+      playCard(choice.index, true);
+      if (!state.gameOver) {
+        if (choice.card.value === "joker" || state.cpuExtraPlay) {
+          const bonusIndex = state.cpu.findIndex(isPlayable);
+          if (bonusIndex >= 0) {
+            const seq = state.turnSeq;
+            const tid = setTimeout(() => {
+              state.cpuActionTimers = state.cpuActionTimers.filter(x => x !== tid);
+              if (seq !== state.turnSeq) return;
+              if (!state.started || state.gameOver || state.turn !== "computer") return;
+              playCard(bonusIndex, true);
+              if (!state.gameOver) endComputerTurn();
+            }, 760);
+            state.cpuActionTimers.push(tid);
+            return;
+          }
+        }
+        endComputerTurn();
+      }
+    }
+
+    function endComputerTurn() {
+      state.cpuDrew = false;
+      state.cpuExtraPlay = false;
+      if (state.pendingSkip === "player") {
+        const reason = state.pendingSkipReason;
+        state.pendingSkip = null;
+        state.pendingSkipReason = null;
+        const reasonText = getSkipReasonText("player", reason);
+        debugLog("player_skip_notice", { reasonText, reason });
+        promptSkipTurnContinue(reasonText);
+        return;
+      }
+      setTurn("player");
+      setLog("내 차례입니다. 선택한 카드가 맞으면 내세요.");
+    }
+
+    function drawForPlayer() {
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      if (state.playerDrew || state.extraPlay) {
+        setLog("이번 턴에는 더 이상 뽑을 수 없습니다.");
+        sfx("error");
+        return;
+      }
+      const drawnList = drawCardsToHand(state.player, 1, false, "player_draw");
+      const drawnEntry = drawnList[0] || null;
+      if (!drawnEntry) {
+        setLog("더 이상 뽑을 카드가 없습니다.");
+        sfx("error");
+        return;
+      }
+      state.playerDrew = true;
+      state.selectedIndex = -1;
+      sfx("draw");
+      updateHud();
+      updateButtons();
+      setLog(`카드를 1장 뽑았습니다: ${describeCard(drawnEntry.card)}`);
+      if (!state.playedThisTurn && !state.player.some(isPlayable)) {
+        promptNoPlayableDrawAndEnd(NO_PLAYABLE_POPUP_DELAY_MS);
+      }
+    }
+
+    function submitSelectedCard() {
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      if (state.selectedIndex < 0) {
+        setLog("먼저 카드를 선택하세요.");
+        sfx("error");
+        return;
+      }
+      const card = state.player[state.selectedIndex];
+      if (!isPlayable(card)) {
+        setLog(`이 카드는 낼 수 없습니다. 색이나 숫자가 맞는 카드를 고르세요.`);
+        sfx("error");
+        return;
+      }
+      const played = playCard(state.selectedIndex, false);
+      if (!played) return;
+      if (state.gameOver) return;
+      if (state.extraPlay) {
+        renderHand();
+        updateButtons();
+        return;
+      }
+
+      if (card.value === "reverse") {
+        setLog("REVERSE 카드 효과로 즉시 상대 턴으로 넘어갑니다.");
+        endPlayerTurn();
+        return;
+      }
+
+      renderHand();
+      updateHud();
+      updateButtons();
+      if (!state.player.some(isPlayable)) {
+        if (!state.playedThisTurn) {
+          // Wait until card-flight animation fully settles before showing the modal.
+          promptNoPlayableDrawAndEnd(NO_PLAYABLE_POPUP_DELAY_MS);
+        } else {
+          setLog("더 낼 수 있는 카드가 없습니다. [턴 종료] 버튼으로 턴을 넘기세요.");
+        }
+      } else {
+        setLog("카드를 냈습니다. 같은 턴에 계속 낼 수 있습니다.");
+      }
+    }
+
+    function chooseJokerColor(color) {
+      // Color-choice flow is not used anymore.
+      void color;
+    }
+
+    function onColorChipClick(event) {
+      const button = event.currentTarget;
+      if (!button || !button.dataset) return;
+      chooseJokerColor(button.dataset.color);
+    }
+
+    function handleKeydown(event) {
+      if (!state.started || state.gameOver || state.turn !== "player") return;
+      const map = {
+        Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4,
+        Digit6: 5, Digit7: 6, Digit8: 7, Digit9: 8, Digit0: 9,
+        Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4,
+        Numpad6: 5, Numpad7: 6, Numpad8: 7, Numpad9: 8, Numpad0: 9,
+      };
+      const keyFromKey = /^[0-9]$/.test(event.key) ? event.key : null;
+      if (map[event.code] !== undefined || keyFromKey !== null) {
+        const keyLabel = keyFromKey !== null ? keyFromKey : getKeyboardLabel(map[event.code]);
+        const index = state.player.findIndex(card => card && card.turnKey === keyLabel);
+        if (index >= 0) {
+          state.selectedIndex = index;
+          renderHand();
+          updateHud();
+          updateButtons();
+          if (isPlayable(state.player[index])) submitSelectedCard();
+          else setLog(`선택됨: ${describeCard(state.player[index])}. 지금은 낼 수 없습니다.`);
+        }
+        event.preventDefault();
+        return;
+      }
+      if (event.code === "Enter" || event.code === "Space") {
+        if (state.selectedIndex >= 0) submitSelectedCard();
+        else drawForPlayer();
+        event.preventDefault();
+        return;
+      }
+      if (event.code === "KeyD") {
+        drawForPlayer();
+        event.preventDefault();
+        return;
+      }
+      if (event.code === "Escape") {
+        state.selectedIndex = -1;
+        renderHand();
+        updateHud();
+        updateButtons();
+      }
+    }
+
+    ui.endBtn.addEventListener("click", endPlayerTurn);
+    ui.startBtn.addEventListener("click", startGame);
+    ui.restartBtn.addEventListener("click", startGame);
+    ui.noPlayableConfirmBtn.addEventListener("click", onNoPlayableConfirm);
+    ui.skipTurnConfirmBtn.addEventListener("click", onSkipTurnConfirm);
+    ui.drawPileCard.addEventListener("click", drawForPlayer);
+    document.querySelectorAll(".color-chip").forEach(button => {
+      button.addEventListener("click", onColorChipClick);
+    });
+    document.addEventListener("keydown", handleKeydown);
+
+    window.__CARD_DUEL_RUNTIME__ = {
+      dispose() {
+        clearAllRuntimeTimers();
+        ui.endBtn.removeEventListener("click", endPlayerTurn);
+        ui.startBtn.removeEventListener("click", startGame);
+        ui.restartBtn.removeEventListener("click", startGame);
+        ui.noPlayableConfirmBtn.removeEventListener("click", onNoPlayableConfirm);
+        ui.skipTurnConfirmBtn.removeEventListener("click", onSkipTurnConfirm);
+        ui.drawPileCard.removeEventListener("click", drawForPlayer);
+        document.querySelectorAll(".color-chip").forEach(button => {
+          button.removeEventListener("click", onColorChipClick);
+        });
+        document.removeEventListener("keydown", handleKeydown);
+      }
+    };
+
+    // Do not auto-start on page load; this keeps reloads after source edits stable.
+  </script>
+</body>
+</html>
