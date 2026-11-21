@@ -218,7 +218,32 @@ function sfx(type) {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
       osc.start(now); osc.stop(now + 0.09);
       break;
+    case 'warning':
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(860, now);
+      osc.frequency.exponentialRampToValueAtTime(540, now + 0.15);
+      gain.gain.setValueAtTime(0.11, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+      break;
   }
+}
+
+function playWarningAlarm() {
+  const tones = [920, 760, 660, 540];
+  tones.forEach((freq, idx) => {
+    if (!audioCtx) return;
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.12);
+    gain.gain.setValueAtTime(0.09, audioCtx.currentTime + idx * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.12 + 0.12);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(audioCtx.currentTime + idx * 0.12);
+    osc.stop(audioCtx.currentTime + idx * 0.12 + 0.12);
+  });
 }
 
 // ════════════════════════════════════════
@@ -231,8 +256,23 @@ const GROUND_Y = 370;   // top of ground surface
 const PW = 36, PH = 50; // player width/height
 const MAX_AMMO = 30;
 const KNIFE_REACH = 1000;
-const KNIFE_FRAMES = 18;
-const KNIFE_COOL  = 36;
+const KNIFE_FRAMES = 12;
+const KNIFE_COOL  = 24;
+const KNIFE_RANGE = 620;
+
+const ENEMY_STAGE_PALETTES = [
+  { slow: '#d93b2d', fast: '#ff8f5b' },
+  { slow: '#2563eb', fast: '#6ec8ff' },
+  { slow: '#e3a900', fast: '#ffe66d' },
+  { slow: '#7c3aed', fast: '#c29dff' },
+  { slow: '#12a36b', fast: '#7ef0c9' },
+  { slow: '#ff5ea8', fast: '#ff9ecb' },
+];
+
+function getEnemyPalette(stage) {
+  const idx = ((stage - 1) % ENEMY_STAGE_PALETTES.length + ENEMY_STAGE_PALETTES.length) % ENEMY_STAGE_PALETTES.length;
+  return ENEMY_STAGE_PALETTES[idx];
+}
 
 const WEAPON_NAMES = { 1:'🔪 나이프', 2:'🔫 권총', 3:'🔫 산탄총', 4:'🚀 유도탄', 5:'⚡ 연발총' };
 
@@ -241,6 +281,18 @@ const WEAPON_NAMES = { 1:'🔪 나이프', 2:'🔫 권총', 3:'🔫 산탄총', 
 // ════════════════════════════════════════
 const keys = {};
 document.addEventListener('keydown', e => {
+  if (e.code === 'PageUp') {
+    aimAngle -= 0.18;
+    if (aimAngle < -1.35) aimAngle = -1.35;
+    e.preventDefault();
+    return;
+  }
+  if (e.code === 'PageDown') {
+    aimAngle += 0.18;
+    if (aimAngle > 1.35) aimAngle = 1.35;
+    e.preventDefault();
+    return;
+  }
   if (!keys[e.code]) {
     keys[e.code] = true;
     handleKey(e.code);
@@ -251,7 +303,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // 마우스 상태
-let mouseX = 0, mouseY = 0, mouseDown = false;
+let mouseX = 0, mouseY = 0, mouseDown = false, mouseAimActive = false;
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -290,6 +342,33 @@ function handleKey(code) {
   }
 }
 
+function getCurrentAimAngle() {
+  if (!player) return 0;
+  const gunX = player.x - cameraX + (player.facing === 1 ? PW + 10 : -10);
+  const gunY = player.y + PH * 0.52;
+  if (mouseAimActive && mouseX >= 0 && mouseX <= canvas.width && mouseY >= 0 && mouseY <= canvas.height) {
+    const angle = Math.atan2(mouseY - gunY, mouseX - gunX);
+    player.aimAngle = angle;
+    return angle;
+  }
+  const normalized = player.facing === 1 ? aimAngle : Math.PI - aimAngle;
+  player.aimAngle = normalized;
+  return normalized;
+}
+
+function getAimReticle() {
+  if (!player) return null;
+  const angle = getCurrentAimAngle();
+  const baseX = player.x - cameraX + (player.facing === 1 ? PW + 6 : -6);
+  const baseY = player.y + PH * 0.52;
+  const dist = 110;
+  return {
+    x: baseX + Math.cos(angle) * dist,
+    y: baseY + Math.sin(angle) * dist,
+    angle
+  };
+}
+
 // ════════════════════════════════════════
 //  GAME STATE VARIABLES
 // ════════════════════════════════════════
@@ -297,7 +376,35 @@ let gs;           // 'title' | 'playing' | 'dead' | 'gameover'
 let score, lives, ammo, cameraX, frameCount, deadTimer, genX;
 let weapon, weaponAmmo, shootCooldown;
 let hack = { god: false, infiniteAmmo: false, nuke: false, speed: false };
-let player, bullets, enemies, items, particles, clouds, trees, groundSegs;
+let player, bullets, enemies, items, particles, clouds, trees, groundSegs, effects;
+let aimAngle = 0;
+let stage = 1;
+let stageGoalX = 1400;
+let stageTimeLeft = 45;
+let warningFreezeTimer = 0;
+let warningTriggered = false;
+
+function getStageTimeLimit() {
+  return Math.max(18, 45 - (stage - 1) * 3);
+}
+
+function getStageModifiers() {
+  return {
+    enemyBoost: 1 + (stage - 1) * 0.14,
+    enemySpeedBoost: 1 + (stage - 1) * 0.06,
+  };
+}
+
+function nextStage() {
+  stage += 1;
+  stageTimeLeft = getStageTimeLimit();
+  warningTriggered = false;
+  warningFreezeTimer = 0;
+  const prevGoal = stageGoalX;
+  stageGoalX = Math.max(prevGoal + 450 + (stage - 1) * 150, player.x + 500 + (stage - 1) * 120);
+  score += 250 + stage * 50;
+  burst(player.x + PW / 2, player.y + PH / 2, '#66ffdd', 18);
+}
 
 // ═══ RANKINGS ═══
 let rankings = loadRankings();
@@ -351,12 +458,19 @@ function startGame() {
   frameCount  = 0;
   deadTimer   = 0;
   genX        = 0;
+  aimAngle    = 0;
+  stage       = 1;
+  stageGoalX  = 1500;
+  stageTimeLeft = getStageTimeLimit();
+  warningTriggered = false;
+  warningFreezeTimer = 0;
 
   groundSegs  = [];
   enemies     = [];
   bullets     = [];
   items       = [];
   particles   = [];
+  effects     = [];
   trees       = [];
 
   // Long safe starting platform
@@ -383,6 +497,7 @@ function spawnPlayer() {
     knifeT:   0,
     knifeCool: 0,
     crouch:   false,
+    aimAngle: 0,
   };
 }
 
@@ -390,16 +505,19 @@ function spawnPlayer() {
 //  WORLD GENERATION
 // ════════════════════════════════════════
 function genWorld(toX) {
+  const { enemyBoost, enemySpeedBoost } = getStageModifiers();
   while (genX < toX) {
     const w = 130 + Math.random() * 190;
     groundSegs.push({ x: genX, w });
 
     if (genX > 800) {
       // Ground enemy - 현재 세그먼트 위에 직접 스폰 (발판 보장)
-      if (Math.random() < 0.98) {
-        const spd = 1.4 + Math.min(score / 2000, 2.0) + Math.random() * 1.2;
+      if (Math.random() < 0.98 * enemyBoost) {
+        const spd = (1.0 + Math.min(score / 2600, 1.4) + Math.random() * 0.85) * enemySpeedBoost;
         const spawnX = genX + 10 + Math.random() * Math.max(w - 20, 10);
         const spawnY = segGroundY({ x: genX, w }, spawnX) - 46;
+        const palette = getEnemyPalette(stage);
+        const color = spd > 2.3 ? palette.fast : palette.slow;
         enemies.push({
           type:    'ground',
           x:       spawnX,
@@ -411,12 +529,15 @@ function genWorld(toX) {
           onGround: true,
           anim:    0,
           animT:   0,
+          color,
         });
       }
       // Flying enemy (appears after some distance)
-      if (genX > 1200 && Math.random() < 0.20) {
-        const spd = 1.8 + Math.min(score / 2500, 1.8) + Math.random() * 1.0;
+      if (genX > 1200 && Math.random() < 0.20 * enemyBoost) {
+        const spd = (1.3 + Math.min(score / 3200, 1.2) + Math.random() * 0.8) * enemySpeedBoost;
         const flyY = 160 + Math.random() * 130;
+        const palette = getEnemyPalette(stage);
+        const color = spd > 2.6 ? palette.fast : palette.slow;
         enemies.push({
           type:    'fly',
           x:       genX + w + 120 + Math.random() * 400,
@@ -429,6 +550,7 @@ function genWorld(toX) {
           anim:    0,
           animT:   0,
           bobT:    Math.random() * Math.PI * 2,
+          color,
         });
       }
       // Heart
@@ -520,71 +642,94 @@ function hasAmmo() {
 
 function doShoot() {
   if (!player) return;
-  // 1 나이프
   if (weapon === 1) { doKnife(); return; }
-  // 엎드릴 때는 낮은 위치에서 발사
+
+  const angle = getCurrentAimAngle();
   const curPH = player.crouch ? 28 : PH;
   const bx = player.x + (player.facing === 1 ? PW + 4 : -4);
   const by = player.y + (PH - curPH) + curPH * 0.5;
-  // 2 권총 (단발)
+
   if (weapon === 2) {
     if (ammo <= 0) { weapon = 1; doKnife(); return; }
     ammo--;
-    bullets.push({ x: bx, y: by, vx: 12*player.facing, vy: 0, alive: true, type: 'pistol' });
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 12, vy: Math.sin(angle) * 12, alive: true, type: 'pistol' });
     sfx('shoot'); return;
   }
-  // 3 산탄총 (3발 포물선)
   if (weapon === 3) {
     if ((weaponAmmo[3]||0) <= 0) { weapon = ammo>0?2:1; doShoot(); return; }
     weaponAmmo[3]--;
-    for (const vy of [-4.5, -2.0, 0.5]) {
-      bullets.push({ x: bx, y: by, vx: 10*player.facing, vy, alive: true, type: 'triple' });
+    for (const spread of [-0.18, 0, 0.18]) {
+      const a = angle + spread;
+      bullets.push({ x: bx, y: by, vx: Math.cos(a) * 10, vy: Math.sin(a) * 10, alive: true, type: 'triple' });
     }
     sfx('shoot'); return;
   }
-  // 4 유도탄
   if (weapon === 4) {
     if ((weaponAmmo[4]||0) <= 0) { weapon = ammo>0?2:1; doShoot(); return; }
     weaponAmmo[4]--;
-    bullets.push({ x: bx, y: by, vx: 8*player.facing, vy: 0, alive: true, type: 'homing', life: 200 });
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, alive: true, type: 'homing', life: 220 });
     sfx('shoot'); return;
   }
-  // 5 연발총
   if (weapon === 5) {
     if ((weaponAmmo[5]||0) <= 0) { weapon = ammo>0?2:1; doShoot(); return; }
     weaponAmmo[5]--;
-    bullets.push({ x: bx, y: by, vx: 15*player.facing, vy: 0, alive: true, type: 'rapid' });
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 15, vy: Math.sin(angle) * 15, alive: true, type: 'rapid' });
     sfx('shoot'); return;
   }
 }
 
 function doKnife() {
   if (!player || player.knifeCool > 0) return;
-  player.knifeT   = KNIFE_FRAMES;
+  const angle = getCurrentAimAngle();
+  player.aimAngle = angle;
+  player.knifeT = KNIFE_FRAMES;
   player.knifeCool = KNIFE_COOL;
+  const ox = player.x + PW * 0.5;
+  const oy = player.y + PH * 0.5;
+  effects.push({
+    type: 'knife',
+    x: ox,
+    y: oy,
+    originX: ox,
+    originY: oy,
+    vx: Math.cos(angle) * 18,
+    vy: Math.sin(angle) * 18,
+    life: 48,
+    angle,
+    radius: 18,
+    maxRange: Math.min(KNIFE_RANGE, W * 0.9 + 80),
+    travelled: 0,
+  });
+  effects.push({
+    type: 'slash',
+    x: ox + Math.cos(angle) * 30,
+    y: oy + Math.sin(angle) * 30,
+    vx: Math.cos(angle) * 10,
+    vy: Math.sin(angle) * 10,
+    life: 12,
+    angle,
+    radius: 18,
+  });
   sfx('knife');
 }
 
 function doShootMouse() {
   if (!player) return;
   if (weapon === 1) { doKnife(); return; }
-  // 총구 위치 (캔버스 좌표)
+  mouseAimActive = true;
   const curPH = player.crouch ? 28 : PH;
   const gunWorldX = player.x + (player.facing === 1 ? PW + 4 : -4);
   const gunScreenX = gunWorldX - cameraX;
   const gunScreenY = player.y + (PH - curPH) + curPH * 0.5;
-  // 마우스 방향 각도
   const angle = Math.atan2(mouseY - gunScreenY, mouseX - gunScreenX);
-  const speed = 14;
-  const vx = Math.cos(angle) * speed;
-  const vy = Math.sin(angle) * speed;
   const bx = gunWorldX;
   const by = gunScreenY;
+  player.aimAngle = angle;
 
   if (weapon === 2) {
     if (ammo <= 0) { weapon = 1; doKnife(); return; }
     ammo--;
-    bullets.push({ x: bx, y: by, vx, vy, alive: true, type: 'pistol' });
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 12, vy: Math.sin(angle) * 12, alive: true, type: 'pistol' });
     sfx('shoot'); return;
   }
   if (weapon === 3) {
@@ -592,20 +737,20 @@ function doShootMouse() {
     weaponAmmo[3]--;
     for (const spread of [-0.18, 0, 0.18]) {
       const a = angle + spread;
-      bullets.push({ x: bx, y: by, vx: Math.cos(a)*10, vy: Math.sin(a)*10, alive: true, type: 'triple' });
+      bullets.push({ x: bx, y: by, vx: Math.cos(a) * 10, vy: Math.sin(a) * 10, alive: true, type: 'triple' });
     }
     sfx('shoot'); return;
   }
   if (weapon === 4) {
     if ((weaponAmmo[4]||0) <= 0) { weapon = ammo>0?2:1; doShootMouse(); return; }
     weaponAmmo[4]--;
-    bullets.push({ x: bx, y: by, vx, vy, alive: true, type: 'homing', life: 200 });
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 8, vy: Math.sin(angle) * 8, alive: true, type: 'homing', life: 220 });
     sfx('shoot'); return;
   }
   if (weapon === 5) {
     if ((weaponAmmo[5]||0) <= 0) { weapon = ammo>0?2:1; return; }
     weaponAmmo[5]--;
-    bullets.push({ x: bx, y: by, vx: Math.cos(angle)*15, vy: Math.sin(angle)*15, alive: true, type: 'rapid' });
+    bullets.push({ x: bx, y: by, vx: Math.cos(angle) * 15, vy: Math.sin(angle) * 15, alive: true, type: 'rapid' });
     sfx('shoot'); return;
   }
 }
@@ -745,6 +890,34 @@ function update() {
     sfx('kill');
   }
 
+  // 시간 제한 체크
+  if (stageTimeLeft <= 5 && !warningTriggered) {
+    warningTriggered = true;
+    warningFreezeTimer = 0.8;
+    playWarningAlarm();
+  }
+
+  if (warningFreezeTimer > 0) {
+    warningFreezeTimer -= 1 / 60;
+    player.vx = 0;
+    player.vy = 0;
+    stageTimeLeft -= 1 / 60;
+    updateParticles();
+    return;
+  }
+
+  stageTimeLeft -= 1 / 60;
+  if (stageTimeLeft <= 0) {
+    killPlayer();
+    return;
+  }
+
+  if (player.x >= stageGoalX) {
+    nextStage();
+  }
+
+  const { enemyBoost: stageEnemyBoost, enemySpeedBoost: stageEnemySpeedBoost } = getStageModifiers();
+
   // 핵: 스피드
   const curBaseSpeed = hack.speed ? SPEED * 2.5 : SPEED;
 
@@ -791,7 +964,9 @@ function update() {
 
   // ── 1초(60프레임)마다 화면 오른쪽 끝에서 적 강제 스폰 ──
   if (frameCount % 60 === 0) {
-    const spd = 1.4 + Math.min(score / 2000, 2.0) + Math.random() * 1.2;
+    const spd = (1.0 + Math.min(score / 2600, 1.4) + Math.random() * 0.85) * stageEnemySpeedBoost;
+    const palette = getEnemyPalette(stage);
+    const color = spd > 2.3 ? palette.fast : palette.slow;
     // 화면 오른쪽에서 발판이 있는 세그먼트 찾기
     const targetX = cameraX + W + 60 + Math.random() * 200;
     const spawnSeg = groundSegs.find(seg =>
@@ -808,11 +983,12 @@ function update() {
         y: GROUND_Y - 46,
         w: 36, h: 46,
         vx: -spd, vy: 0,
-        alive: true, onGround: true, anim: 0, animT: 0,
+        alive: true, onGround: true, anim: 0, animT: 0, color,
       });
     }
-    if (cameraX > 1200 && frameCount % 180 === 0) {
-      const flySpd = 1.8 + Math.min(score / 2500, 1.8) + Math.random() * 1.0;
+    if (cameraX > 1200 && frameCount % (Math.max(90, 180 - (stage - 1) * 12)) === 0) {
+      const flySpd = (1.3 + Math.min(score / 3200, 1.2) + Math.random() * 0.8) * stageEnemySpeedBoost;
+      const flyColor = flySpd > 2.6 ? palette.fast : palette.slow;
       enemies.push({
         type: 'fly',
         x: cameraX + W + 80 + Math.random() * 200,
@@ -821,6 +997,7 @@ function update() {
         vx: -flySpd, vy: 0,
         alive: true, onGround: false, anim: 0, animT: 0,
         bobT: Math.random() * Math.PI * 2,
+        color: flyColor,
       });
     }
   }
@@ -845,12 +1022,21 @@ function update() {
 
   if (player.knifeT > 0) {
     player.knifeT--;
-    // Hit enemies in melee range (reach up for flying enemies too)
-    const kx = player.facing === 1 ? player.x + PW : player.x - KNIFE_REACH;
-    const ky = player.y - 20;
+    const aim = getCurrentAimAngle();
+    const dirX = Math.cos(aim);
+    const dirY = Math.sin(aim);
+    const originX = player.x + PW * 0.5;
+    const originY = player.y + PH * 0.5;
+    const range = 92;
     for (const e of enemies) {
       if (!e.alive) continue;
-      if (overlap(kx, ky, KNIFE_REACH, 70, e.x, e.y, e.w, e.h)) {
+      const cx = e.x + e.w * 0.5;
+      const cy = e.y + e.h * 0.5;
+      const dx = cx - originX;
+      const dy = cy - originY;
+      const proj = dx * dirX + dy * dirY;
+      const perp = Math.abs(dx * -dirY + dy * dirX);
+      if (proj >= 0 && proj <= range && perp <= 32) {
         e.alive = false;
         score  += 150;
         burst(e.x + e.w / 2, e.y + e.h / 2, '#ff8844', 12);
@@ -862,9 +1048,7 @@ function update() {
   // ── Bullets ──
   for (const b of bullets) {
     if (!b.alive) continue;
-    // 포물선 중력 (산탄총)
     if (b.type === 'triple') b.vy = (b.vy||0) + 0.18;
-    // 유도탄: 가장 가까운 적 추적
     if (b.type === 'homing') {
       b.life = (b.life||200) - 1;
       if (b.life <= 0) { b.alive = false; continue; }
@@ -901,6 +1085,34 @@ function update() {
       }
     }
   }
+
+  for (const fx of effects) {
+    if (fx.type === 'knife') {
+      fx.x += fx.vx;
+      fx.y += fx.vy;
+      fx.travelled = Math.hypot(fx.x - fx.originX, fx.y - fx.originY);
+      if (fx.travelled >= fx.maxRange) fx.life = 0;
+    } else {
+      fx.x += fx.vx;
+      fx.y += fx.vy;
+    }
+    fx.life--;
+    if (fx.type === 'knife') {
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const dist = Math.hypot(e.x + e.w * 0.5 - fx.x, e.y + e.h * 0.5 - fx.y);
+        if (dist < 30) {
+          e.alive = false;
+          score += 150;
+          burst(e.x + e.w / 2, e.y + e.h / 2, '#ff8844', 12);
+          sfx('kill');
+          fx.life = 0;
+          break;
+        }
+      }
+    }
+  }
+  effects = effects.filter(fx => fx.life > 0);
 
   // ── Enemies ──
   for (const e of enemies) {
@@ -1156,10 +1368,10 @@ function drawGround(seg) {
   }
 }
 
-function drawFlyEnemy(x, y, anim) {
+function drawFlyEnemy(x, y, anim, color = '#8833cc') {
   // Wings (flap)
   const wingUp = anim === 0;
-  ctx.fillStyle = '#8833cc';
+  ctx.fillStyle = color;
   // Left wing
   ctx.beginPath();
   ctx.moveTo(x + 8,  y + 14);
@@ -1171,7 +1383,7 @@ function drawFlyEnemy(x, y, anim) {
   ctx.bezierCurveTo(x + 72, wingUp ? y - 12 : y + 2,  x + 76, wingUp ? y + 8 : y + 18,  x + 40, y + 22);
   ctx.closePath(); ctx.fill();
   // Wing highlight
-  ctx.fillStyle = '#aa55ff';
+  ctx.fillStyle = '#fff';
   ctx.beginPath();
   ctx.moveTo(x + 10, y + 14);
   ctx.bezierCurveTo(x - 14, wingUp ? y - 4 : y + 4,  x - 16, wingUp ? y + 8 : y + 14,  x + 6, y + 20);
@@ -1181,10 +1393,10 @@ function drawFlyEnemy(x, y, anim) {
   ctx.bezierCurveTo(x + 58, wingUp ? y - 4 : y + 4,  x + 60, wingUp ? y + 8 : y + 14,  x + 38, y + 20);
   ctx.closePath(); ctx.fill();
   // Body
-  ctx.fillStyle = '#5500aa';
+  ctx.fillStyle = color;
   rrect(x + 6, y + 8, 32, 24, 6); ctx.fill();
   // Head
-  ctx.fillStyle = '#6600cc';
+  ctx.fillStyle = '#ffffff';
   rrect(x + 8, y, 28, 18, 6); ctx.fill();
   // Eyes
   ctx.fillStyle = '#ff4400';
@@ -1194,7 +1406,7 @@ function drawFlyEnemy(x, y, anim) {
   ctx.beginPath(); ctx.arc(x + 14, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + 30, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
   // Tail / claws
-  ctx.fillStyle = '#8833cc';
+  ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x + 18, y + 32); ctx.lineTo(x + 10, y + 44); ctx.lineTo(x + 16, y + 33); ctx.fill();
   ctx.beginPath();
@@ -1203,84 +1415,41 @@ function drawFlyEnemy(x, y, anim) {
   ctx.moveTo(x + 28, y + 32); ctx.lineTo(x + 34, y + 44); ctx.lineTo(x + 30, y + 33); ctx.fill();
 }
 
-function drawFlyEnemy(x, y, anim) {
-  const wingUp = anim === 0;
-  // Left wing
-  ctx.fillStyle = '#8833cc';
-  ctx.beginPath();
-  ctx.moveTo(x + 8,  y + 14);
-  ctx.bezierCurveTo(x - 28, wingUp ? y - 12 : y + 2, x - 32, wingUp ? y + 8 : y + 18, x + 4, y + 22);
-  ctx.closePath(); ctx.fill();
-  // Right wing
-  ctx.beginPath();
-  ctx.moveTo(x + 36, y + 14);
-  ctx.bezierCurveTo(x + 72, wingUp ? y - 12 : y + 2, x + 76, wingUp ? y + 8 : y + 18, x + 40, y + 22);
-  ctx.closePath(); ctx.fill();
-  // Wing highlight
-  ctx.fillStyle = '#aa55ff';
-  ctx.beginPath();
-  ctx.moveTo(x + 10, y + 14);
-  ctx.bezierCurveTo(x - 14, wingUp ? y - 4 : y + 4, x - 16, wingUp ? y + 8 : y + 14, x + 6, y + 20);
-  ctx.closePath(); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(x + 34, y + 14);
-  ctx.bezierCurveTo(x + 58, wingUp ? y - 4 : y + 4, x + 60, wingUp ? y + 8 : y + 14, x + 38, y + 20);
-  ctx.closePath(); ctx.fill();
+function drawEnemy(x, y, anim, color = '#c83000') {
   // Body
-  ctx.fillStyle = '#5500aa';
-  rrect(x + 6, y + 8, 32, 24, 6); ctx.fill();
-  // Head
-  ctx.fillStyle = '#6600cc';
-  rrect(x + 8, y, 28, 18, 6); ctx.fill();
-  // Eyes
-  ctx.fillStyle = '#ff4400';
-  ctx.beginPath(); ctx.arc(x + 14, y + 9, 5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 30, y + 9, 5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffee00';
-  ctx.beginPath(); ctx.arc(x + 14, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 30, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
-  // Claws
-  ctx.fillStyle = '#8833cc';
-  ctx.beginPath(); ctx.moveTo(x + 14, y + 32); ctx.lineTo(x +  8, y + 44); ctx.lineTo(x + 14, y + 33); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x + 22, y + 32); ctx.lineTo(x + 22, y + 46); ctx.lineTo(x + 26, y + 33); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x + 30, y + 32); ctx.lineTo(x + 36, y + 44); ctx.lineTo(x + 30, y + 33); ctx.fill();
-}
-
-function drawEnemy(x, y, anim) {
-  // Body
-  ctx.fillStyle = '#c83000';
+  ctx.fillStyle = color;
   rrect(x, y + 12, 36, 34, 5); ctx.fill();
   // Head
-  ctx.fillStyle = '#e84020';
+  ctx.fillStyle = '#ffffff';
   rrect(x + 2, y, 32, 24, 7); ctx.fill();
   // Horns
-  ctx.fillStyle = '#ff6600';
+  ctx.fillStyle = '#ffd166';
   ctx.beginPath();
   ctx.moveTo(x +  7, y);    ctx.lineTo(x + 11, y - 13); ctx.lineTo(x + 15, y); ctx.fill();
   ctx.beginPath();
   ctx.moveTo(x + 21, y);    ctx.lineTo(x + 25, y - 13); ctx.lineTo(x + 29, y); ctx.fill();
   // Eyes
-  ctx.fillStyle = '#ffee00';
+  ctx.fillStyle = '#222';
   ctx.fillRect(x +  5, y + 6, 9, 8);
   ctx.fillRect(x + 22, y + 6, 9, 8);
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = '#ffee00';
   ctx.fillRect(x +  7, y + 8, 5, 5);
   ctx.fillRect(x + 24, y + 8, 5, 5);
   // Eyebrows
-  ctx.fillStyle = '#880000';
+  ctx.fillStyle = '#000000';
   ctx.fillRect(x +  4, y + 4, 11, 3);
   ctx.fillRect(x + 21, y + 4, 11, 3);
   // Mouth
-  ctx.fillStyle = '#880000';
+  ctx.fillStyle = '#000000';
   ctx.fillRect(x + 8, y + 18, 20, 3);
   // Legs
-  ctx.fillStyle = '#aa2200';
+  ctx.fillStyle = '#222222';
   const l1 = anim === 0 ? 9 : 13;
   const l2 = anim === 0 ? 13 : 9;
   ctx.fillRect(x +  6, y + 44, 10, l1);
   ctx.fillRect(x + 20, y + 44, 10, l2);
   // Arms
-  ctx.fillStyle = '#c83000';
+  ctx.fillStyle = color;
   if (anim === 0) {
     ctx.fillRect(x - 9, y + 15, 11, 8);
     ctx.fillRect(x + 34, y + 21, 11, 8);
@@ -1431,8 +1600,10 @@ function drawPlayer(x, y, facing, anim, onGround, knifeT, shadowWorldX, crouch) 
     ctx.fillRect(x + 33, spriteY + 21, 8, 14);
     // Gun or Knife - weapon 별 이미지
     if (weapon === 1) {
-      // 나이프
-      const angle = knifeT > 0 ? -Math.PI * 0.7 * (knifeT / KNIFE_FRAMES) : -Math.PI * 0.15;
+      const aim = player.aimAngle || 0;
+      const baseAngle = player.facing === 1 ? aim : Math.PI - aim;
+      const swing = knifeT > 0 ? (-Math.PI * 0.65) * (knifeT / KNIFE_FRAMES) : 0;
+      const angle = baseAngle + swing;
       ctx.save();
       ctx.translate(x + 36, spriteY + 28);
       ctx.rotate(angle);
@@ -1560,9 +1731,100 @@ function drawAmmoItem(x, y) {
   ctx.restore();
 }
 
+function drawSlashEffect(fx) {
+  ctx.save();
+  ctx.translate(fx.x - cameraX, fx.y);
+  ctx.rotate(fx.angle);
+  const alpha = Math.max(0, fx.life / 12);
+  ctx.strokeStyle = `rgba(255,255,255,${0.9 * alpha})`;
+  ctx.shadowColor = 'rgba(180,220,255,0.95)';
+  ctx.shadowBlur = 18;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, fx.radius, -0.8, 0.8);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-fx.radius * 0.6, 0);
+  ctx.lineTo(fx.radius * 1.2, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawKnifeProjectile(fx) {
+  const len = Math.min(fx.maxRange, Math.max(16, fx.travelled));
+  const fromX = (fx.originX - cameraX) + Math.cos(fx.angle) * (Math.max(0, len - 20));
+  const fromY = fx.originY + Math.sin(fx.angle) * (Math.max(0, len - 20));
+  const endX = fx.x - cameraX;
+  const endY = fx.y;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#8fd3ff';
+  ctx.shadowBlur = 16;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawAimReticle() {
+  if (!player || !gs || gs === 'title' || gs === 'gameover') return;
+  const ret = getAimReticle();
+  if (!ret) return;
+
+  ctx.save();
+  ctx.translate(ret.x, ret.y);
+  ctx.strokeStyle = 'rgba(255,240,120,0.95)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-14, 0); ctx.lineTo(-4, 0);
+  ctx.moveTo(4, 0); ctx.lineTo(14, 0);
+  ctx.moveTo(0, -14); ctx.lineTo(0, -4);
+  ctx.moveTo(0, 4); ctx.lineTo(0, 14);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawHUD() {
   ctx.fillStyle = 'rgba(0,0,0,0.62)';
   ctx.fillRect(0, 0, W, 62);
+
+  const timerX = 170;
+  const timerY = 28;
+  const timerR = 22;
+  const dangerMode = stageTimeLeft <= 5;
+  const timerBlink = dangerMode && Math.sin(Date.now() * 0.02) > 0;
+
+  ctx.save();
+  ctx.translate(timerX, timerY);
+  ctx.fillStyle = 'rgba(8, 18, 34, 0.95)';
+  ctx.beginPath(); ctx.arc(0, 0, timerR, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = dangerMode ? 'rgba(255, 60, 60, 0.95)' : 'rgba(255, 221, 110, 0.95)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = timerBlink ? '#ff3d3d' : '#ffd96a';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${Math.max(0, stageTimeLeft).toFixed(1)}s`, 0, 1);
+  ctx.restore();
+
+  if (dangerMode) {
+    ctx.fillStyle = timerBlink ? '#ffdbdb' : '#ff6b6b';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('위용 위용 위용 윙요!!!', W / 2, 78);
+  }
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`STAGE ${stage}`, 212, 18);
+  ctx.fillText(`GOAL ${Math.max(0, Math.ceil(stageGoalX - player.x))}m`, 212, 50);
 
   // 생명
   ctx.fillStyle = '#fff';
@@ -1783,8 +2045,8 @@ function draw() {
   // Enemies
   for (const e of enemies || []) {
     if (!e.alive) continue;
-    if (e.type === 'fly') drawFlyEnemy(e.x - cameraX, e.y, e.anim);
-    else                  drawEnemy(e.x - cameraX, e.y, e.anim);
+    if (e.type === 'fly') drawFlyEnemy(e.x - cameraX, e.y, e.anim, e.color || '#8833cc');
+    else                  drawEnemy(e.x - cameraX, e.y, e.anim, e.color || '#c83000');
   }
 
   // Bullets
@@ -1811,6 +2073,29 @@ function draw() {
     const show = gs === 'dead' ? true : (player.inv % 6 < 3);
     if (show) drawPlayer(player.x - cameraX, player.y, player.facing, player.anim, player.onGround, player.knifeT, player.x + PW / 2, player.crouch);
   }
+
+  if (effects) {
+    for (const fx of effects) {
+      if (fx.type === 'knife') drawKnifeProjectile(fx);
+      else if (fx.type === 'slash') drawSlashEffect(fx);
+    }
+  }
+
+  const goalX = stageGoalX - cameraX;
+  if (goalX > -40 && goalX < W + 40) {
+    const flagY = GROUND_Y - 58;
+    ctx.fillStyle = '#fff7b2';
+    ctx.fillRect(goalX, flagY, 4, 54);
+    ctx.fillStyle = '#ffdb4d';
+    ctx.beginPath();
+    ctx.moveTo(goalX + 4, flagY + 4);
+    ctx.lineTo(goalX + 36, flagY + 18);
+    ctx.lineTo(goalX + 4, flagY + 32);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  drawAimReticle();
 
   // Particles
   for (const p of particles || []) {
