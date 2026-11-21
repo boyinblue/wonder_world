@@ -255,6 +255,11 @@ const SPEED    = 4;
 const GROUND_Y = 370;   // top of ground surface
 const PW = 36, PH = 50; // player width/height
 const MAX_AMMO = 30;
+<<<<<<< HEAD
+const KNIFE_REACH = 52;
+const KNIFE_FRAMES = 18;
+const KNIFE_COOL  = 36;
+=======
 const KNIFE_REACH = 1000;
 const KNIFE_FRAMES = 12;
 const KNIFE_COOL  = 24;
@@ -273,6 +278,7 @@ function getEnemyPalette(stage) {
   const idx = ((stage - 1) % ENEMY_STAGE_PALETTES.length + ENEMY_STAGE_PALETTES.length) % ENEMY_STAGE_PALETTES.length;
   return ENEMY_STAGE_PALETTES[idx];
 }
+>>>>>>> 2c36ee5af1c506714cad2f917e614d7e126744c9
 
 const WEAPON_NAMES = { 1:'🔪 나이프', 2:'🔫 권총', 3:'🔫 산탄총', 4:'🚀 유도탄', 5:'⚡ 연발총' };
 
