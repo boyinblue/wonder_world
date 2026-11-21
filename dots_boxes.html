@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dots Boxes Duel</title>
+  <style>
+    :root {
+      --bg-1: #f4efe3;
+      --bg-2: #d9e7f6;
+      --panel: rgba(255, 252, 245, 0.92);
+      --ink: #17202a;
+      --muted: #5d6976;
+      --line: #1d2d3f;
+      --edge: #bfc8d2;
+      --red: #e24b4b;
+      --red-fill: rgba(226, 75, 75, 0.18);
+      --blue: #3d73ff;
+      --blue-fill: rgba(61, 115, 255, 0.18);
+      --gold: #ffb703;
+      --shadow: 0 16px 40px rgba(20, 28, 44, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(255, 199, 95, 0.65), transparent 28%),
+        radial-gradient(circle at 88% 12%, rgba(91, 160, 255, 0.32), transparent 24%),
+        linear-gradient(145deg, var(--bg-1), var(--bg-2));
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 28px));
+      margin: 14px auto;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 2px solid rgba(23, 32, 42, 0.12);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(4px);
+    }
+
+    .sidebar {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      position: sticky;
+      top: 14px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 0.95;
+      text-transform: lowercase;
+      letter-spacing: -1px;
+    }
+
+    .brand p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .setup {
+      display: grid;
+      gap: 10px;
+    }
+
+    .setup h2,
+    .scoreboard h2,
+    .status h2,
+    .guide h2 {
+      margin: 0 0 2px;
+      font-size: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .field input,
+    .field select,
+    .field button {
+      width: 100%;
+      border-radius: 12px;
+      border: 2px solid rgba(23, 32, 42, 0.12);
+      padding: 10px 12px;
+      font: inherit;
+      background: #fffdf8;
+      color: var(--ink);
+    }
+
+    .mode-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .mode-btn,
+    .action-btn,
+    .ghost-btn {
+      border-radius: 12px;
+      border: 2px solid var(--line);
+      background: #fffdf7;
+      color: var(--line);
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .mode-btn.active,
+    .action-btn {
+      background: var(--line);
+      color: #fff;
+      box-shadow: 0 6px 14px rgba(29, 45, 63, 0.18);
+    }
+
+    .mode-btn:hover,
+    .action-btn:hover,
+    .ghost-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .ghost-btn {
+      background: transparent;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .scoreboard,
+    .status,
+    .guide {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.65);
+      border: 2px solid transparent;
+    }
+
+    .score-row.active {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 4px rgba(255, 183, 3, 0.18);
+    }
+
+    .score-row .name {
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .score-row .meta {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .score-row .value {
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .score-row.red { background: rgba(226, 75, 75, 0.08); }
+    .score-row.blue { background: rgba(61, 115, 255, 0.08); }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-box {
+      background: rgba(255,255,255,0.68);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .stat-box .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .stat-box .big {
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .timer-meter {
+      margin-top: 8px;
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(23, 32, 42, 0.12);
+      overflow: hidden;
+      border: 1px solid rgba(23, 32, 42, 0.08);
+    }
+
+    .timer-fill {
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #2ec27e, #ffb703, #e24b4b);
+      transform-origin: left center;
+      transition: width 120ms linear, filter 120ms linear;
+      filter: saturate(1);
+    }
+
+    .guide ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .board-wrap {
+      min-height: calc(100vh - 28px);
+      display: grid;
+      padding: 14px;
+    }
+
+    .board-panel {
+      position: relative;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .turn-pill,
+    .winner-pill,
+    .mode-pill {
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight: 800;
+      background: rgba(255,255,255,0.78);
+      border: 2px solid rgba(23, 32, 42, 0.12);
+    }
+
+    .winner-pill {
+      background: rgba(255, 183, 3, 0.18);
+      border-color: rgba(255, 183, 3, 0.5);
+    }
+
+    canvas {
+      width: 100%;
+      height: min(78vh, 820px);
+      max-height: 820px;
+      display: block;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.88), rgba(247, 249, 255, 0.82)),
+        repeating-linear-gradient(45deg, rgba(23, 32, 42, 0.015) 0 12px, transparent 12px 24px);
+      border: 2px solid rgba(23, 32, 42, 0.12);
+      cursor: pointer;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 68px 14px 14px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border-radius: 18px;
+      background: rgba(14, 20, 28, 0.38);
+      padding: 20px;
+    }
+
+    .overlay.show { display: flex; }
+
+    .overlay-card {
+      width: min(460px, 100%);
+      background: rgba(255, 252, 245, 0.98);
+      border-radius: 20px;
+      border: 2px solid rgba(23, 32, 42, 0.12);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      display: grid;
+      gap: 12px;
+      text-align: center;
+    }
+
+    .overlay-card h2 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .overlay-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .link-row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .back-link {
+      color: var(--line);
+      text-decoration: none;
+      font-weight: 800;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+      }
+
+      canvas {
+        height: min(64vh, 680px);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100vw - 12px, 100%);
+        margin: 6px auto;
+      }
+
+      .board-wrap,
+      .sidebar,
+      .board-panel {
+        padding: 10px;
+      }
+
+      .mode-row,
+      .actions,
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+
+      canvas {
+        height: 58vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="panel sidebar">
+      <section class="brand">
+        <h1>dots boxes duel</h1>
+        <p>선분을 이어 사각형을 완성하면 내 땅이 됩니다. 빨강 vs 파랑, 또는 CPU와 대결할 수 있습니다.</p>
+      </section>
+
+      <section class="setup">
+        <h2>게임 설정</h2>
+        <div class="mode-row">
+          <button id="modeOneBtn" class="mode-btn active" type="button">1인용</button>
+          <button id="modeTwoBtn" class="mode-btn" type="button">2인용</button>
+        </div>
+        <div class="field">
+          <label for="playerOneInput">플레이어 1 이름</label>
+          <input id="playerOneInput" maxlength="16" value="레드" />
+        </div>
+        <div class="field">
+          <label for="playerTwoInput" id="playerTwoLabel">CPU 이름</label>
+          <input id="playerTwoInput" maxlength="16" value="CPU" />
+        </div>
+        <div class="field">
+          <label for="gridSelect">격자 크기</label>
+          <select id="gridSelect">
+            <option value="4">4 x 4 점</option>
+            <option value="5" selected>5 x 5 점</option>
+            <option value="6">6 x 6 점</option>
+            <option value="7">7 x 7 점</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="turnTimeSelect">턴당 제한 시간</label>
+          <select id="turnTimeSelect">
+            <option value="5">5초</option>
+            <option value="10" selected>10초</option>
+            <option value="15">15초</option>
+            <option value="20">20초</option>
+          </select>
+        </div>
+        <div class="field" id="cpuDifficultyField">
+          <label for="cpuSelect">CPU 난이도</label>
+          <select id="cpuSelect">
+            <option value="easy">하</option>
+            <option value="medium" selected>중</option>
+            <option value="hard">상</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button id="startBtn" class="action-btn" type="button">게임 시작</button>
+          <button id="resetBtn" class="ghost-btn" type="button">초기화</button>
+        </div>
+      </section>
+
+      <section class="panel scoreboard">
+        <h2>점유 현황</h2>
+        <div id="playerOneScore" class="score-row red active">
+          <div>
+            <div class="name" id="playerOneNameView">레드</div>
+            <div class="meta">빨간 선 / 빨간 땅</div>
+          </div>
+          <div class="value" id="playerOneScoreValue">0</div>
+        </div>
+        <div id="playerTwoScore" class="score-row blue">
+          <div>
+            <div class="name" id="playerTwoNameView">CPU</div>
+            <div class="meta">파란 선 / 파란 땅</div>
+          </div>
+          <div class="value" id="playerTwoScoreValue">0</div>
+        </div>
+      </section>
+
+      <section class="panel status">
+        <h2>진행 상태</h2>
+        <div class="status-grid">
+          <div class="stat-box">
+            <div class="label">현재 턴</div>
+            <div class="big" id="turnView">레드</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">남은 시간</div>
+            <div class="big" id="timerView">10</div>
+            <div class="timer-meter"><div id="timerFill" class="timer-fill"></div></div>
+          </div>
+          <div class="stat-box">
+            <div class="label">남은 선</div>
+            <div class="big" id="remainingEdgesView">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">모드</div>
+            <div class="big" id="modeView">1인용</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel guide">
+        <h2>규칙</h2>
+        <ul>
+          <li>선분을 클릭해 차례대로 한 줄씩 긋습니다.</li>
+          <li>사각형을 완성한 플레이어는 그 칸을 얻고 한 번 더 둡니다.</li>
+          <li>턴 시간이 0초가 되면 그 턴은 자동으로 종료됩니다.</li>
+          <li>모든 선을 다 그리면 더 많은 칸을 차지한 플레이어가 승리합니다.</li>
+        </ul>
+        <div class="link-row">
+          <a class="back-link" href="index.html">게임 포털</a>
+        </div>
+      </section>
+    </aside>
+
+    <main class="board-wrap">
+      <section class="panel board-panel">
+        <div class="topbar">
+          <div id="turnPill" class="turn-pill">빨강 차례</div>
+          <div id="modePill" class="mode-pill">1인용 · CPU 중</div>
+          <div id="winnerPill" class="winner-pill" hidden>대기 중</div>
+        </div>
+        <canvas id="game" width="920" height="820"></canvas>
+        <div id="overlay" class="overlay show">
+          <div class="overlay-card">
+            <h2>선분으로 땅을 차지하세요</h2>
+            <p>왼쪽에서 이름, 모드, 제한 시간을 정한 뒤 게임을 시작하면 됩니다.</p>
+            <div class="link-row">
+              <button id="overlayStartBtn" class="action-btn" type="button">바로 시작</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const modeOneBtn = document.getElementById('modeOneBtn');
+    const modeTwoBtn = document.getElementById('modeTwoBtn');
+    const playerOneInput = document.getElementById('playerOneInput');
+    const playerTwoInput = document.getElementById('playerTwoInput');
+    const playerTwoLabel = document.getElementById('playerTwoLabel');
+    const gridSelect = document.getElementById('gridSelect');
+    const turnTimeSelect = document.getElementById('turnTimeSelect');
+    const cpuSelect = document.getElementById('cpuSelect');
+    const cpuDifficultyField = document.getElementById('cpuDifficultyField');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const overlay = document.getElementById('overlay');
+    const overlayStartBtn = document.getElementById('overlayStartBtn');
+
+    const playerOneScore = document.getElementById('playerOneScore');
+    const playerTwoScore = document.getElementById('playerTwoScore');
+    const playerOneNameView = document.getElementById('playerOneNameView');
+    const playerTwoNameView = document.getElementById('playerTwoNameView');
+    const playerOneScoreValue = document.getElementById('playerOneScoreValue');
+    const playerTwoScoreValue = document.getElementById('playerTwoScoreValue');
+    const turnView = document.getElementById('turnView');
+    const timerView = document.getElementById('timerView');
+    const timerFill = document.getElementById('timerFill');
+    const remainingEdgesView = document.getElementById('remainingEdgesView');
+    const modeView = document.getElementById('modeView');
+    const turnPill = document.getElementById('turnPill');
+    const modePill = document.getElementById('modePill');
+    const winnerPill = document.getElementById('winnerPill');
+
+    const COLORS = {
+      red: '#e24b4b',
+      blue: '#3d73ff',
+      redFill: 'rgba(226, 75, 75, 0.18)',
+      blueFill: 'rgba(61, 115, 255, 0.18)',
+      edge: '#bfc8d2',
+      ghost: 'rgba(23, 32, 42, 0.10)',
+      ink: '#17202a',
+      dot: '#1b2430',
+      gold: '#ffb703'
+    };
+
+    let audioCtx = null;
+
+    const state = {
+      mode: 'one',
+      cpuDifficulty: 'medium',
+      turnTime: 10,
+      gridSize: 5,
+      players: [],
+      current: 0,
+      horiz: [],
+      vert: [],
+      boxes: [],
+      segments: [],
+      hoverSegment: null,
+      running: false,
+      winner: null,
+      remainingEdges: 0,
+      lastTick: 0,
+      timeLeft: 10,
+      cpuWaitUntil: 0,
+      cpuPlannedMove: null,
+      mouseX: 0,
+      mouseY: 0,
+      edgeAnimations: [],
+      boxAnimations: [],
+    };
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        audioCtx = new Ctx();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playTone(kind) {
+      const ctxAudio = ensureAudio();
+      if (!ctxAudio) return;
+      const osc = ctxAudio.createOscillator();
+      const gain = ctxAudio.createGain();
+      osc.connect(gain);
+      gain.connect(ctxAudio.destination);
+      const now = ctxAudio.currentTime;
+      if (kind === 'box') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.exponentialRampToValueAtTime(760, now + 0.12);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        return;
+      }
+      if (kind === 'timeout') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(180, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.06, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.16);
+        return;
+      }
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(330, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.055, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    }
+
+    function makePlayers() {
+      const first = sanitizeName(playerOneInput.value, '레드');
+      const secondFallback = state.mode === 'one' ? 'CPU' : '블루';
+      const second = sanitizeName(playerTwoInput.value, secondFallback);
+      return [
+        { id: 0, name: first, color: 'red', score: 0, isCpu: false },
+        { id: 1, name: second, color: 'blue', score: 0, isCpu: state.mode === 'one' },
+      ];
+    }
+
+    function sanitizeName(value, fallback) {
+      const trimmed = String(value || '').trim();
+      return trimmed ? trimmed.slice(0, 16) : fallback;
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      const one = mode === 'one';
+      modeOneBtn.classList.toggle('active', one);
+      modeTwoBtn.classList.toggle('active', !one);
+      cpuDifficultyField.style.display = one ? 'grid' : 'none';
+      playerTwoLabel.textContent = one ? 'CPU 이름' : '플레이어 2 이름';
+      if (one && !playerTwoInput.value.trim()) playerTwoInput.value = 'CPU';
+      if (!one && playerTwoInput.value.trim() === 'CPU') playerTwoInput.value = '블루';
+      syncSummaryLabels();
+    }
+
+    function syncSummaryLabels() {
+      const modeText = state.mode === 'one' ? '1인용' : '2인용';
+      modeView.textContent = modeText;
+      const diffMap = { easy: '하', medium: '중', hard: '상' };
+      modePill.textContent = state.mode === 'one'
+        ? `${modeText} · CPU ${diffMap[state.cpuDifficulty]}`
+        : modeText;
+    }
+
+    function startGame() {
+      ensureAudio();
+      state.cpuDifficulty = cpuSelect.value;
+      state.turnTime = Number(turnTimeSelect.value);
+      state.gridSize = Number(gridSelect.value);
+      state.players = makePlayers();
+      state.current = 0;
+      state.winner = null;
+      state.running = true;
+      state.timeLeft = state.turnTime;
+      state.lastTick = performance.now();
+      state.cpuWaitUntil = 0;
+      state.cpuPlannedMove = null;
+      state.hoverSegment = null;
+      state.edgeAnimations = [];
+      state.boxAnimations = [];
+
+      buildBoard(state.gridSize);
+      scheduleCpuTurnIfNeeded(true);
+      syncSummaryLabels();
+      updateSidebar();
+      overlay.classList.remove('show');
+      draw();
+    }
+
+    function buildBoard(dotCount) {
+      state.horiz = Array.from({ length: dotCount }, () => Array(dotCount - 1).fill(-1));
+      state.vert = Array.from({ length: dotCount - 1 }, () => Array(dotCount).fill(-1));
+      state.boxes = Array.from({ length: dotCount - 1 }, () => Array(dotCount - 1).fill(-1));
+      for (const player of state.players) player.score = 0;
+      state.segments = [];
+      const boardSize = dotCount - 1;
+      state.remainingEdges = dotCount * (dotCount - 1) * 2;
+      const size = Math.min(canvas.width, canvas.height) - 180;
+      const spacing = boardSize > 0 ? size / boardSize : size;
+      const offsetX = (canvas.width - spacing * boardSize) / 2;
+      const offsetY = (canvas.height - spacing * boardSize) / 2;
+
+      for (let r = 0; r < dotCount; r++) {
+        for (let c = 0; c < dotCount - 1; c++) {
+          const x1 = offsetX + c * spacing;
+          const y1 = offsetY + r * spacing;
+          const x2 = x1 + spacing;
+          state.segments.push({ type: 'h', r, c, x1, y1, x2, y2: y1, cx: (x1 + x2) / 2, cy: y1, length: spacing });
+        }
+      }
+      for (let r = 0; r < dotCount - 1; r++) {
+        for (let c = 0; c < dotCount; c++) {
+          const x1 = offsetX + c * spacing;
+          const y1 = offsetY + r * spacing;
+          const y2 = y1 + spacing;
+          state.segments.push({ type: 'v', r, c, x1, y1, x2: x1, y2, cx: x1, cy: (y1 + y2) / 2, length: spacing });
+        }
+      }
+
+      state.board = { dotCount, spacing, offsetX, offsetY, size };
+    }
+
+    function updateSidebar() {
+      const p1 = state.players[0] || { name: '레드', score: 0 };
+      const p2 = state.players[1] || { name: '블루', score: 0 };
+      playerOneNameView.textContent = p1.name;
+      playerTwoNameView.textContent = p2.name;
+      playerOneScoreValue.textContent = p1.score;
+      playerTwoScoreValue.textContent = p2.score;
+      playerOneScore.classList.toggle('active', state.running && state.current === 0);
+      playerTwoScore.classList.toggle('active', state.running && state.current === 1);
+      const currentPlayer = state.players[state.current] || p1;
+      turnView.textContent = currentPlayer.name;
+      timerView.textContent = Math.max(0, Math.ceil(state.timeLeft));
+      const timeRatio = Math.max(0, Math.min(1, state.timeLeft / Math.max(1, state.turnTime)));
+      timerFill.style.width = `${timeRatio * 100}%`;
+      timerFill.style.filter = timeRatio < 0.25 ? 'saturate(1.35) brightness(1.05)' : 'saturate(1)';
+      remainingEdgesView.textContent = state.remainingEdges;
+      const thinking = currentPlayer.isCpu && state.running && performance.now() < state.cpuWaitUntil;
+      turnPill.textContent = state.running
+        ? `${currentPlayer.name} ${thinking ? '생각 중...' : '차례'}`
+        : '시작 대기';
+
+      if (state.winner === null) {
+        winnerPill.hidden = true;
+      } else {
+        winnerPill.hidden = false;
+        winnerPill.textContent = state.winner === 'draw' ? '무승부' : `${state.players[state.winner].name} 승리`;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
+      drawBoxes();
+      drawEdges();
+      drawHover();
+      drawDots();
+    }
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, 'rgba(255,255,255,0.68)');
+      grad.addColorStop(1, 'rgba(231,240,255,0.72)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawBoxes() {
+      if (!state.board) return;
+      const { dotCount, spacing, offsetX, offsetY } = state.board;
+      for (let r = 0; r < dotCount - 1; r++) {
+        for (let c = 0; c < dotCount - 1; c++) {
+          const owner = state.boxes[r][c];
+          if (owner === -1) continue;
+          const player = state.players[owner];
+          const anim = findBoxAnimation(r, c);
+          const progress = anim ? Math.min(1, (performance.now() - anim.start) / anim.duration) : 1;
+          const eased = 1 - Math.pow(1 - progress, 3);
+          const padBase = 12;
+          const grow = (1 - eased) * Math.min(22, spacing * 0.18);
+          const pad = padBase + grow;
+          ctx.fillStyle = player.color === 'red' ? COLORS.redFill : COLORS.blueFill;
+          ctx.save();
+          ctx.globalAlpha = 0.45 + eased * 0.55;
+          ctx.fillRect(offsetX + c * spacing + pad, offsetY + r * spacing + pad, spacing - pad * 2, spacing - pad * 2);
+          ctx.restore();
+          ctx.fillStyle = player.color === 'red' ? COLORS.red : COLORS.blue;
+          ctx.font = `${Math.max(14, spacing * 0.22)}px Trebuchet MS`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(player.name.slice(0, 2), offsetX + c * spacing + spacing / 2, offsetY + r * spacing + spacing / 2);
+        }
+      }
+    }
+
+    function drawEdges() {
+      ctx.lineCap = 'round';
+      for (const seg of state.segments) {
+        const owner = getSegmentOwner(seg);
+        if (owner === -1) {
+          ctx.beginPath();
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(seg.x2, seg.y2);
+          ctx.strokeStyle = COLORS.edge;
+          ctx.lineWidth = 8;
+          ctx.stroke();
+        } else {
+          const player = state.players[owner];
+          const anim = findEdgeAnimation(seg);
+          const progress = anim ? Math.min(1, (performance.now() - anim.start) / anim.duration) : 1;
+          const eased = 1 - Math.pow(1 - progress, 3);
+          const endX = seg.x1 + (seg.x2 - seg.x1) * eased;
+          const endY = seg.y1 + (seg.y2 - seg.y1) * eased;
+          ctx.beginPath();
+          ctx.moveTo(seg.x1, seg.y1);
+          ctx.lineTo(endX, endY);
+          ctx.strokeStyle = player.color === 'red' ? COLORS.red : COLORS.blue;
+          ctx.lineWidth = 12;
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawHover() {
+      const seg = state.hoverSegment;
+      if (!seg || !state.running || currentPlayerIsCpu()) return;
+      if (getSegmentOwner(seg) !== -1) return;
+      const player = state.players[state.current];
+      ctx.beginPath();
+      ctx.moveTo(seg.x1, seg.y1);
+      ctx.lineTo(seg.x2, seg.y2);
+      ctx.strokeStyle = player.color === 'red' ? 'rgba(226,75,75,0.35)' : 'rgba(61,115,255,0.35)';
+      ctx.lineWidth = 16;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    function drawDots() {
+      const { dotCount, spacing, offsetX, offsetY } = state.board;
+      for (let r = 0; r < dotCount; r++) {
+        for (let c = 0; c < dotCount; c++) {
+          const x = offsetX + c * spacing;
+          const y = offsetY + r * spacing;
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.fillStyle = COLORS.dot;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#fefefe';
+          ctx.fill();
+        }
+      }
+    }
+
+    function getSegmentOwner(seg) {
+      return seg.type === 'h' ? state.horiz[seg.r][seg.c] : state.vert[seg.r][seg.c];
+    }
+
+    function setSegmentOwner(seg, owner) {
+      if (seg.type === 'h') state.horiz[seg.r][seg.c] = owner;
+      else state.vert[seg.r][seg.c] = owner;
+    }
+
+    function currentPlayerIsCpu() {
+      return state.running && state.players[state.current] && state.players[state.current].isCpu;
+    }
+
+    function findNearestSegment(x, y) {
+      let best = null;
+      let bestDist = Infinity;
+      const threshold = Math.max(20, state.board.spacing * 0.2);
+      for (const seg of state.segments) {
+        if (getSegmentOwner(seg) !== -1) continue;
+        let dist;
+        if (seg.type === 'h') {
+          if (x < Math.min(seg.x1, seg.x2) - 10 || x > Math.max(seg.x1, seg.x2) + 10) continue;
+          dist = Math.abs(y - seg.y1);
+        } else {
+          if (y < Math.min(seg.y1, seg.y2) - 10 || y > Math.max(seg.y1, seg.y2) + 10) continue;
+          dist = Math.abs(x - seg.x1);
+        }
+        if (dist < bestDist && dist <= threshold) {
+          bestDist = dist;
+          best = seg;
+        }
+      }
+      return best;
+    }
+
+    function claimSegment(seg, owner) {
+      if (!state.running || !seg || getSegmentOwner(seg) !== -1) return false;
+      setSegmentOwner(seg, owner);
+      state.edgeAnimations.push({ type: seg.type, r: seg.r, c: seg.c, start: performance.now(), duration: 220 });
+      playTone('line');
+      state.remainingEdges--;
+      const completed = resolveCompletedBoxes(seg, owner);
+      if (state.remainingEdges <= 0) {
+        finishGame();
+      } else if (completed === 0) {
+        nextTurn();
+      } else {
+        state.timeLeft = state.turnTime;
+        state.lastTick = performance.now();
+        scheduleCpuTurnIfNeeded(false);
+      }
+      updateSidebar();
+      draw();
+      return true;
+    }
+
+    function resolveCompletedBoxes(seg, owner) {
+      let count = 0;
+      const checks = [];
+      if (seg.type === 'h') {
+        if (seg.r > 0) checks.push({ r: seg.r - 1, c: seg.c });
+        if (seg.r < state.board.dotCount - 1) checks.push({ r: seg.r, c: seg.c });
+      } else {
+        if (seg.c > 0) checks.push({ r: seg.r, c: seg.c - 1 });
+        if (seg.c < state.board.dotCount - 1) checks.push({ r: seg.r, c: seg.c });
+      }
+
+      for (const box of checks) {
+        if (box.r < 0 || box.c < 0 || box.r >= state.boxes.length || box.c >= state.boxes[0].length) continue;
+        if (state.boxes[box.r][box.c] !== -1) continue;
+        const top = state.horiz[box.r][box.c] !== -1;
+        const bottom = state.horiz[box.r + 1][box.c] !== -1;
+        const left = state.vert[box.r][box.c] !== -1;
+        const right = state.vert[box.r][box.c + 1] !== -1;
+        if (top && bottom && left && right) {
+          state.boxes[box.r][box.c] = owner;
+          state.players[owner].score++;
+          state.boxAnimations.push({ r: box.r, c: box.c, start: performance.now(), duration: 260 });
+          count++;
+        }
+      }
+      if (count > 0) playTone('box');
+      return count;
+    }
+
+    function nextTurn() {
+      state.current = 1 - state.current;
+      state.timeLeft = state.turnTime;
+      state.lastTick = performance.now();
+      scheduleCpuTurnIfNeeded(true);
+    }
+
+    function finishGame() {
+      state.running = false;
+      const a = state.players[0].score;
+      const b = state.players[1].score;
+      state.winner = a === b ? 'draw' : (a > b ? 0 : 1);
+      overlay.classList.add('show');
+      overlay.querySelector('h2').textContent = state.winner === 'draw'
+        ? '무승부입니다'
+        : `${state.players[state.winner].name} 승리`;
+      overlay.querySelector('p').textContent = `${state.players[0].name} ${a}칸 · ${state.players[1].name} ${b}칸`;
+    }
+
+    function allAvailableMoves() {
+      return state.segments.filter(seg => getSegmentOwner(seg) === -1);
+    }
+
+    function previewBoxesCompleted(seg) {
+      let count = 0;
+      const checks = [];
+      if (seg.type === 'h') {
+        if (seg.r > 0) checks.push({ r: seg.r - 1, c: seg.c });
+        if (seg.r < state.board.dotCount - 1) checks.push({ r: seg.r, c: seg.c });
+      } else {
+        if (seg.c > 0) checks.push({ r: seg.r, c: seg.c - 1 });
+        if (seg.c < state.board.dotCount - 1) checks.push({ r: seg.r, c: seg.c });
+      }
+
+      for (const box of checks) {
+        if (box.r < 0 || box.c < 0 || box.r >= state.boxes.length || box.c >= state.boxes[0].length) continue;
+        if (state.boxes[box.r][box.c] !== -1) continue;
+        let sides = 0;
+        sides += state.horiz[box.r][box.c] !== -1 ? 1 : 0;
+        sides += state.horiz[box.r + 1][box.c] !== -1 ? 1 : 0;
+        sides += state.vert[box.r][box.c] !== -1 ? 1 : 0;
+        sides += state.vert[box.r][box.c + 1] !== -1 ? 1 : 0;
+        if (sides === 3) count++;
+      }
+      return count;
+    }
+
+    function previewDanger(seg) {
+      const impacted = [];
+      if (seg.type === 'h') {
+        if (seg.r > 0) impacted.push({ r: seg.r - 1, c: seg.c });
+        if (seg.r < state.board.dotCount - 1) impacted.push({ r: seg.r, c: seg.c });
+      } else {
+        if (seg.c > 0) impacted.push({ r: seg.r, c: seg.c - 1 });
+        if (seg.c < state.board.dotCount - 1) impacted.push({ r: seg.r, c: seg.c });
+      }
+      let danger = 0;
+      for (const box of impacted) {
+        if (box.r < 0 || box.c < 0 || box.r >= state.boxes.length || box.c >= state.boxes[0].length) continue;
+        if (state.boxes[box.r][box.c] !== -1) continue;
+        let sides = 1;
+        sides += state.horiz[box.r][box.c] !== -1 ? 1 : 0;
+        sides += state.horiz[box.r + 1][box.c] !== -1 ? 1 : 0;
+        sides += state.vert[box.r][box.c] !== -1 ? 1 : 0;
+        sides += state.vert[box.r][box.c + 1] !== -1 ? 1 : 0;
+        if (sides === 3) danger++;
+      }
+      return danger;
+    }
+
+    function chooseCpuMove() {
+      const moves = allAvailableMoves();
+      if (!moves.length) return null;
+      const captures = moves.filter(move => previewBoxesCompleted(move) > 0);
+      if (captures.length) {
+        captures.sort((a, b) => previewBoxesCompleted(b) - previewBoxesCompleted(a));
+        return captures[0];
+      }
+
+      if (state.cpuDifficulty === 'easy') {
+        return moves[Math.floor(Math.random() * moves.length)];
+      }
+
+      const safeMoves = moves.filter(move => previewDanger(move) === 0);
+      if (state.cpuDifficulty === 'medium') {
+        const pool = safeMoves.length ? safeMoves : moves;
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      const scored = moves.map(move => ({ move, danger: previewDanger(move), bias: centerBias(move) }));
+      scored.sort((a, b) => a.danger - b.danger || b.bias - a.bias);
+      return scored[0].move;
+    }
+
+    function centerBias(move) {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      return -Math.hypot(move.cx - cx, move.cy - cy);
+    }
+
+    function findEdgeAnimation(seg) {
+      return state.edgeAnimations.find(anim => anim.type === seg.type && anim.r === seg.r && anim.c === seg.c);
+    }
+
+    function findBoxAnimation(r, c) {
+      return state.boxAnimations.find(anim => anim.r === r && anim.c === c);
+    }
+
+    function pruneAnimations(now) {
+      state.edgeAnimations = state.edgeAnimations.filter(anim => now - anim.start < anim.duration);
+      state.boxAnimations = state.boxAnimations.filter(anim => now - anim.start < anim.duration);
+    }
+
+    function cpuThinkDelay() {
+      if (state.cpuDifficulty === 'hard') return 780 + Math.random() * 520;
+      if (state.cpuDifficulty === 'medium') return 1150 + Math.random() * 850;
+      return 1600 + Math.random() * 1200;
+    }
+
+    function scheduleCpuTurnIfNeeded(fullThink) {
+      if (!currentPlayerIsCpu()) {
+        state.cpuPlannedMove = null;
+        state.cpuWaitUntil = 0;
+        return;
+      }
+      state.cpuPlannedMove = chooseCpuMove();
+      state.cpuWaitUntil = performance.now() + (fullThink ? cpuThinkDelay() : Math.max(520, cpuThinkDelay() * 0.55));
+    }
+
+    function update(now) {
+      if (!state.running) {
+        draw();
+        requestAnimationFrame(update);
+        return;
+      }
+
+      const dt = Math.min(0.05, (now - state.lastTick) / 1000);
+      state.lastTick = now;
+      pruneAnimations(now);
+      state.timeLeft -= dt;
+      if (state.timeLeft <= 0) {
+        playTone('timeout');
+        nextTurn();
+      }
+
+      if (currentPlayerIsCpu() && now >= state.cpuWaitUntil) {
+        const move = state.cpuPlannedMove && getSegmentOwner(state.cpuPlannedMove) === -1
+          ? state.cpuPlannedMove
+          : chooseCpuMove();
+        if (move) {
+          state.cpuPlannedMove = null;
+          claimSegment(move, state.current);
+        }
+      }
+
+      updateSidebar();
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function resetSetup() {
+      playerOneInput.value = '레드';
+      playerTwoInput.value = state.mode === 'one' ? 'CPU' : '블루';
+      gridSelect.value = '5';
+      turnTimeSelect.value = '10';
+      cpuSelect.value = 'medium';
+      state.cpuDifficulty = 'medium';
+      syncSummaryLabels();
+    }
+
+    canvas.addEventListener('mousemove', event => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+      state.mouseX = x;
+      state.mouseY = y;
+      state.hoverSegment = state.board ? findNearestSegment(x, y) : null;
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      state.hoverSegment = null;
+    });
+
+    canvas.addEventListener('click', event => {
+      if (!state.running || currentPlayerIsCpu()) return;
+      ensureAudio();
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+      const seg = findNearestSegment(x, y);
+      if (seg) claimSegment(seg, state.current);
+    });
+
+    modeOneBtn.addEventListener('click', () => setMode('one'));
+    modeTwoBtn.addEventListener('click', () => setMode('two'));
+    startBtn.addEventListener('click', startGame);
+    overlayStartBtn.addEventListener('click', startGame);
+    resetBtn.addEventListener('click', resetSetup);
+    cpuSelect.addEventListener('change', () => {
+      state.cpuDifficulty = cpuSelect.value;
+      syncSummaryLabels();
+    });
+
+    setMode('one');
+    resetSetup();
+    buildBoard(5);
+    updateSidebar();
+    draw();
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>
